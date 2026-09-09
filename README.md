@@ -2,6 +2,8 @@
 
 A lightweight macOS floating widget that sits beside Codex and shows Codex usage continuously.
 
+中文说明：[README.zh-CN.md](README.zh-CN.md)
+
 ![Codex Usage Widget preview](assets/preview.png)
 
 - Primary Codex rate-limit percentage and reset time
@@ -11,7 +13,7 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 - The history chart button opens a filtered trend chart with 24-hour, 7-day, 30-day, or all-history ranges and primary/secondary/both metric selections
 - Shows available manual reset credits beside the reset time; click the count to view each available credit's expiration when the app-server provides details
 - The appearance settings support a custom background image and image opacity; the existing dark theme color remains overlaid, and automatic compact scaling can be enabled with a configurable 1–10 second delay
-- The menu bar can show live usage as `CODEX(5h 42% 1W 18%)`; its visibility is configurable and enabled by default
+- The menu bar can show live usage as `CODEX(5h:42%|1W:18%)`; its visibility is configurable and enabled by default
 - Drag the panel near a screen edge to snap and collapse it to a minimal 5-hour/long-cycle view; hover over it to restore the full panel
 - `assets/icon.png` is used as the application icon and is converted to a multi-resolution `AppIcon.icns` during the build
 - Appends every successful usage record to `~/Library/Application Support/Codex Usage Widget/usage-history.jsonl`; the history is kept outside the app bundle so app updates do not remove it
