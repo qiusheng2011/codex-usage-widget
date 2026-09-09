@@ -1521,7 +1521,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = menuBarStatusItem?.button else { return }
         let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
         let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
-        button.title = "CODEX(5h \(primary) 1W \(secondary))"
+        button.title = "CODEX(5h:\(primary)|1W:\(secondary))"
     }
 
     @objc private func menuBarStatusItemClicked() {
