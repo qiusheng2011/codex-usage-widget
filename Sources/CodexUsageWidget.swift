@@ -1529,7 +1529,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let title = "CODEX(5h:\(primary)|1W:\(secondary))"
         button.title = ""
         button.attributedTitle = NSAttributedString(string: "")
-        button.image = menuBarImage(title: title)
+        button.image = menuBarImage(primary: primary, secondary: secondary)
         button.setAccessibilityLabel(title)
     }
 
@@ -1541,18 +1541,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
     }
 
-    private func menuBarImage(title: String) -> NSImage {
-        let attributes: [NSAttributedString.Key: Any] = [
+    private func menuBarImage(primary: String, secondary: String) -> NSImage {
+        let attributedTitle = NSMutableAttributedString()
+        let whiteAttributes: [NSAttributedString.Key: Any] = [
+            .font: menuBarFont,
+            .foregroundColor: NSColor.white
+        ]
+        let redAttributes: [NSAttributedString.Key: Any] = [
             .font: menuBarFont,
             .foregroundColor: menuBarAccentColor
         ]
-        let textSize = (title as NSString).size(withAttributes: attributes)
+        attributedTitle.append(NSAttributedString(string: "CODEX(5h:", attributes: whiteAttributes))
+        attributedTitle.append(NSAttributedString(string: primary, attributes: redAttributes))
+        attributedTitle.append(NSAttributedString(string: "|1W:", attributes: whiteAttributes))
+        attributedTitle.append(NSAttributedString(string: secondary, attributes: redAttributes))
+        attributedTitle.append(NSAttributedString(string: ")", attributes: whiteAttributes))
+
+        let textSize = attributedTitle.size()
         let image = NSImage(size: NSSize(width: ceil(textSize.width) + 4, height: 20))
         image.lockFocus()
-        (title as NSString).draw(
-            at: NSPoint(x: 2, y: max(0, (image.size.height - textSize.height) / 2)),
-            withAttributes: attributes
-        )
+        attributedTitle.draw(at: NSPoint(x: 2, y: max(0, (image.size.height - textSize.height) / 2)))
         image.unlockFocus()
         image.isTemplate = false
         return image
