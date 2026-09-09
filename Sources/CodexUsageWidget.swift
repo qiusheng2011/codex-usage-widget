@@ -13,7 +13,11 @@ private struct ManualResetCredit: Codable {
 private enum AppearancePreference {
     static let backgroundImagePath = "appearance.backgroundImagePath"
     static let backgroundImageOpacity = "appearance.backgroundImageOpacity"
+    static let autoCollapseEnabled = "appearance.autoCollapseEnabled"
+    static let compactCollapseDelay = "appearance.compactCollapseDelay"
     static let defaultBackgroundImageOpacity = 0.28
+    static let defaultAutoCollapseEnabled = true
+    static let defaultCompactCollapseDelay = 2.0
 }
 
 private struct UsageSnapshot: Codable {
@@ -482,6 +486,9 @@ private final class UsagePanel: NSPanel {
 
 private final class UsageView: NSView {
     var onManualResetClick: (() -> Void)?
+    var onDragEnded: (() -> Void)?
+    var onMouseEnteredPanel: (() -> Void)?
+    var onMouseExitedPanel: (() -> Void)?
     var snapshot = UsageSnapshot.loading {
         didSet {
             needsDisplay = true
@@ -494,8 +501,21 @@ private final class UsageView: NSView {
     var backgroundImageOpacity: CGFloat = 0.28 {
         didSet { needsDisplay = true }
     }
+    private var isCompactPresentation = false {
+        didSet {
+            guard oldValue != isCompactPresentation else { return }
+            for subview in subviews {
+                subview.isHidden = isCompactPresentation
+            }
+            if !isCompactPresentation {
+                updateManualResetButton()
+            }
+            needsDisplay = true
+        }
+    }
 
     private let manualResetButton = NSButton(title: "", target: nil, action: nil)
+    private var trackingArea: NSTrackingArea?
 
     override var isFlipped: Bool { true }
 
@@ -515,6 +535,31 @@ private final class UsageView: NSView {
         manualResetButton.frame = NSRect(x: bounds.width - width - 18, y: 121, width: width, height: 20)
     }
 
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let trackingArea {
+            removeTrackingArea(trackingArea)
+        }
+        let trackingArea = NSTrackingArea(
+            rect: bounds,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self,
+            userInfo: nil
+        )
+        addTrackingArea(trackingArea)
+        self.trackingArea = trackingArea
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        onMouseEnteredPanel?()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onMouseExitedPanel?()
+    }
+
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 16, yRadius: 16)
@@ -524,6 +569,14 @@ private final class UsageView: NSView {
         NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 0.5).setStroke()
         card.lineWidth = 1
         card.stroke()
+
+        if isCompactPresentation {
+            let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
+            let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
+            drawCenteredText("5 小时  \(primary)", y: 12, font: .systemFont(ofSize: 11, weight: .semibold), color: .white)
+            drawCenteredText("长周期  \(secondary)", y: 35, font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.72, alpha: 1))
+            return
+        }
 
         drawText("Codex·用量", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
         drawText(snapshot.available ? "LIVE" : "读取中", at: NSPoint(x: 92, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
@@ -617,7 +670,15 @@ private final class UsageView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        if isCompactPresentation {
+            onMouseEnteredPanel?()
+        }
         window?.performDrag(with: event)
+        onDragEnded?()
+    }
+
+    func setCompactPresentation(_ compact: Bool) {
+        isCompactPresentation = compact
     }
 
     private var accentColor: NSColor {
@@ -631,6 +692,11 @@ private final class UsageView: NSView {
     private func drawRightAlignedText(_ text: String, rightX: CGFloat, y: CGFloat, font: NSFont, color: NSColor) {
         let width = (text as NSString).size(withAttributes: [.font: font]).width
         drawText(text, at: NSPoint(x: rightX - width, y: y), font: font, color: color)
+    }
+
+    private func drawCenteredText(_ text: String, y: CGFloat, font: NSFont, color: NSColor) {
+        let width = (text as NSString).size(withAttributes: [.font: font]).width
+        drawText(text, at: NSPoint(x: bounds.midX - width / 2, y: y), font: font, color: color)
     }
 
     private func progressColor(_ value: Int) -> NSColor {
@@ -922,24 +988,39 @@ private final class AppearanceSettingsView: NSView {
     var onChooseImage: (() -> Void)?
     var onClearImage: (() -> Void)?
     var onOpacityChanged: ((CGFloat) -> Void)?
+    var onAutoCollapseChanged: ((Bool) -> Void)?
+    var onCollapseDelayChanged: ((TimeInterval) -> Void)?
 
     private let imagePathLabel = NSTextField(labelWithString: "")
     private let opacitySlider = NSSlider(value: 0.28, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let opacityValueLabel = NSTextField(labelWithString: "28%")
     private let chooseButton = NSButton(title: "选择图片", target: nil, action: nil)
     private let clearButton = NSButton(title: "清除图片", target: nil, action: nil)
+    private let autoCollapseButton = NSButton(checkboxWithTitle: "自动缩放为极简卡片", target: nil, action: nil)
+    private let collapseDelaySlider = NSSlider(value: 2, minValue: 1, maxValue: 10, target: nil, action: nil)
+    private let collapseDelayValueLabel = NSTextField(labelWithString: "2 秒")
     private let hintLabel = NSTextField(labelWithString: "主题色保持为当前深色主题，图片只会作为半透明背景叠加。")
 
     override var isFlipped: Bool { true }
 
-    init(imagePath: String?, opacity: CGFloat) {
+    init(imagePath: String?, opacity: CGFloat, autoCollapseEnabled: Bool, collapseDelay: TimeInterval) {
         super.init(frame: .zero)
-        configure(imagePath: imagePath, opacity: opacity)
+        configure(
+            imagePath: imagePath,
+            opacity: opacity,
+            autoCollapseEnabled: autoCollapseEnabled,
+            collapseDelay: collapseDelay
+        )
     }
 
     required init?(coder: NSCoder) {
         super.init(coder: coder)
-        configure(imagePath: nil, opacity: 0.28)
+        configure(
+            imagePath: nil,
+            opacity: 0.28,
+            autoCollapseEnabled: true,
+            collapseDelay: 2
+        )
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -956,7 +1037,10 @@ private final class AppearanceSettingsView: NSView {
         clearButton.frame = NSRect(x: 112, y: 68, width: 88, height: 26)
         opacitySlider.frame = NSRect(x: 112, y: 112, width: max(120, width - 174), height: 20)
         opacityValueLabel.frame = NSRect(x: width - 54, y: 112, width: 42, height: 20)
-        hintLabel.frame = NSRect(x: 18, y: 154, width: max(1, width - 36), height: 20)
+        autoCollapseButton.frame = NSRect(x: 18, y: 144, width: 220, height: 20)
+        collapseDelaySlider.frame = NSRect(x: 112, y: 178, width: max(120, width - 174), height: 20)
+        collapseDelayValueLabel.frame = NSRect(x: width - 54, y: 178, width: 42, height: 20)
+        hintLabel.frame = NSRect(x: 18, y: 220, width: max(1, width - 36), height: 20)
     }
 
     func updateImagePath(_ path: String?) {
@@ -967,6 +1051,20 @@ private final class AppearanceSettingsView: NSView {
         let value = min(max(opacity, 0), 1)
         opacitySlider.doubleValue = Double(value)
         opacityValueLabel.stringValue = "\(Int((value * 100).rounded()))%"
+    }
+
+    func updateAutoCollapse(_ enabled: Bool) {
+        autoCollapseButton.state = enabled ? .on : .off
+        collapseDelaySlider.isEnabled = enabled
+        collapseDelayValueLabel.textColor = enabled
+            ? NSColor(white: 0.78, alpha: 1)
+            : NSColor(white: 0.4, alpha: 1)
+    }
+
+    func updateCollapseDelay(_ delay: TimeInterval) {
+        let value = min(max(delay, 1), 10).rounded()
+        collapseDelaySlider.doubleValue = value
+        collapseDelayValueLabel.stringValue = "\(Int(value)) 秒"
     }
 
     @objc private func chooseImage() {
@@ -981,7 +1079,20 @@ private final class AppearanceSettingsView: NSView {
         onOpacityChanged?(CGFloat(opacitySlider.doubleValue))
     }
 
-    private func configure(imagePath: String?, opacity: CGFloat) {
+    @objc private func autoCollapseChanged() {
+        onAutoCollapseChanged?(autoCollapseButton.state == .on)
+    }
+
+    @objc private func collapseDelayChanged() {
+        onCollapseDelayChanged?(collapseDelaySlider.doubleValue.rounded())
+    }
+
+    private func configure(
+        imagePath: String?,
+        opacity: CGFloat,
+        autoCollapseEnabled: Bool,
+        collapseDelay: TimeInterval
+    ) {
         wantsLayer = true
         addSubview(label("背景图片", frame: NSRect(x: 18, y: 16, width: 100, height: 20), size: 12, weight: .semibold, color: .white))
         imagePathLabel.font = .systemFont(ofSize: 11)
@@ -1009,12 +1120,32 @@ private final class AppearanceSettingsView: NSView {
         opacityValueLabel.textColor = NSColor(white: 0.78, alpha: 1)
         addSubview(opacityValueLabel)
 
+        autoCollapseButton.font = .systemFont(ofSize: 11, weight: .medium)
+        autoCollapseButton.contentTintColor = NSColor(white: 0.82, alpha: 1)
+        autoCollapseButton.target = self
+        autoCollapseButton.action = #selector(autoCollapseChanged)
+        addSubview(autoCollapseButton)
+
+        addSubview(label("缩放等待", frame: NSRect(x: 18, y: 178, width: 86, height: 20), size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1)))
+        collapseDelaySlider.controlSize = .small
+        collapseDelaySlider.numberOfTickMarks = 10
+        collapseDelaySlider.allowsTickMarkValuesOnly = true
+        collapseDelaySlider.isContinuous = true
+        collapseDelaySlider.target = self
+        collapseDelaySlider.action = #selector(collapseDelayChanged)
+        addSubview(collapseDelaySlider)
+        collapseDelayValueLabel.alignment = .right
+        collapseDelayValueLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        addSubview(collapseDelayValueLabel)
+
         hintLabel.font = .systemFont(ofSize: 10)
         hintLabel.textColor = NSColor(white: 0.5, alpha: 1)
         hintLabel.lineBreakMode = .byTruncatingTail
         addSubview(hintLabel)
         updateImagePath(imagePath)
         updateOpacity(opacity)
+        updateAutoCollapse(autoCollapseEnabled)
+        updateCollapseDelay(collapseDelay)
     }
 
     private func configureButton(_ button: NSButton) {
@@ -1037,7 +1168,17 @@ private final class AppearanceSettingsView: NSView {
     }
 }
 
+private enum PanelEdge {
+    case left
+    case right
+    case top
+    case bottom
+}
+
 private final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let expandedPanelSize = NSSize(width: 320, height: 176)
+    private let compactPanelSize = NSSize(width: 126, height: 66)
+    private let edgeSnapDistance: CGFloat = 28
     private let usageClient = UsageClient()
     private var panel: UsagePanel?
     private var usageView: UsageView?
@@ -1050,6 +1191,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceSettingsView: AppearanceSettingsView?
     private var latestSnapshot = UsageSnapshot.loading
     private var isOneShot = false
+    private var panelEdge: PanelEdge?
+    private var pointerInsidePanel = false
+    private var compactCollapseTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         isOneShot = CommandLine.arguments.contains("--once")
@@ -1096,6 +1240,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         content.onManualResetClick = { [weak self] in
             self?.showManualResetDetails()
         }
+        content.onDragEnded = { [weak self] in
+            self?.finishPanelDrag()
+        }
+        content.onMouseEnteredPanel = { [weak self] in
+            self?.panelPointerEntered()
+        }
+        content.onMouseExitedPanel = { [weak self] in
+            self?.panelPointerExited()
+        }
         let buttonRed = NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
         let settings = toolbarButton(
             title: "设置",
@@ -1103,7 +1256,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             frame: NSRect(x: 174, y: 11, width: 36, height: 22),
             color: buttonRed
         )
-        settings.toolTip = "设置背景图片和图片透明度"
+        settings.toolTip = "设置背景图片、透明度和极简自动缩放"
         settings.setAccessibilityLabel("外观设置")
         content.addSubview(settings)
         let chart = toolbarButton(
@@ -1144,16 +1297,135 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         usageView = content
     }
 
+    private func panelPointerEntered() {
+        pointerInsidePanel = true
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        guard panelEdge != nil else { return }
+        setPanelCompact(false)
+    }
+
+    private func panelPointerExited() {
+        pointerInsidePanel = false
+        scheduleCompactCollapse()
+    }
+
+    private func scheduleCompactCollapse() {
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        guard autoCollapseEnabled, panelEdge != nil else { return }
+        compactCollapseTimer = Timer.scheduledTimer(withTimeInterval: compactCollapseDelay, repeats: false) { [weak self] _ in
+            guard let self, !self.pointerInsidePanel, self.panelEdge != nil else { return }
+            self.setPanelCompact(true)
+        }
+    }
+
+    private func finishPanelDrag() {
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        guard let panel else { return }
+
+        let frame = panel.frame
+        guard let screen = screen(for: frame) else {
+            panelEdge = nil
+            setPanelCompact(false)
+            return
+        }
+        let visibleFrame = screen.visibleFrame
+        let candidates: [(PanelEdge, CGFloat)] = [
+            (.left, abs(frame.minX - visibleFrame.minX)),
+            (.right, abs(visibleFrame.maxX - frame.maxX)),
+            (.top, abs(visibleFrame.maxY - frame.maxY)),
+            (.bottom, abs(frame.minY - visibleFrame.minY))
+        ]
+        guard let nearest = candidates.min(by: { $0.1 < $1.1 }), nearest.1 <= edgeSnapDistance else {
+            panelEdge = nil
+            setPanelCompact(false)
+            return
+        }
+
+        panelEdge = nearest.0
+        let expandedOrigin = anchoredOrigin(
+            for: nearest.0,
+            size: expandedPanelSize,
+            in: visibleFrame,
+            currentOrigin: frame.origin
+        )
+        panel.setFrame(NSRect(origin: expandedOrigin, size: expandedPanelSize), display: true)
+        pointerInsidePanel = panel.frame.contains(NSEvent.mouseLocation)
+        setPanelCompact(autoCollapseEnabled && !pointerInsidePanel)
+    }
+
+    private func setPanelCompact(_ compact: Bool) {
+        guard let panel else { return }
+        let size = compact ? compactPanelSize : expandedPanelSize
+        let currentFrame = panel.frame
+        var origin = currentFrame.origin
+        if let edge = panelEdge, let screen = screen(for: currentFrame) {
+            origin = anchoredOrigin(
+                for: edge,
+                size: size,
+                in: screen.visibleFrame,
+                currentOrigin: currentFrame.origin
+            )
+        } else if !compact {
+            origin = currentFrame.origin
+        }
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
+        usageView?.setCompactPresentation(compact)
+    }
+
+    private func screen(for frame: NSRect) -> NSScreen? {
+        let center = NSPoint(x: frame.midX, y: frame.midY)
+        return NSScreen.screens.first(where: { $0.frame.contains(center) })
+            ?? NSScreen.main
+            ?? NSScreen.screens.first
+    }
+
+    private func anchoredOrigin(
+        for edge: PanelEdge,
+        size: NSSize,
+        in visibleFrame: NSRect,
+        currentOrigin: NSPoint
+    ) -> NSPoint {
+        let maxX = max(visibleFrame.minX, visibleFrame.maxX - size.width)
+        let maxY = max(visibleFrame.minY, visibleFrame.maxY - size.height)
+        switch edge {
+        case .left:
+            return NSPoint(
+                x: visibleFrame.minX,
+                y: min(max(currentOrigin.y, visibleFrame.minY), maxY)
+            )
+        case .right:
+            return NSPoint(
+                x: maxX,
+                y: min(max(currentOrigin.y, visibleFrame.minY), maxY)
+            )
+        case .top:
+            return NSPoint(
+                x: min(max(currentOrigin.x, visibleFrame.minX), maxX),
+                y: maxY
+            )
+        case .bottom:
+            return NSPoint(
+                x: min(max(currentOrigin.x, visibleFrame.minX), maxX),
+                y: visibleFrame.minY
+            )
+        }
+    }
+
     @objc private func showAppearanceSettings() {
         if let appearanceSettingsPanel {
             appearanceSettingsView?.updateImagePath(savedBackgroundImagePath)
             appearanceSettingsView?.updateOpacity(savedBackgroundImageOpacity)
+            appearanceSettingsView?.updateAutoCollapse(autoCollapseEnabled)
+            appearanceSettingsView?.updateCollapseDelay(compactCollapseDelay)
             appearanceSettingsPanel.makeKeyAndOrderFront(nil)
             return
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 196),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 262),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -1168,7 +1440,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let settings = AppearanceSettingsView(
             imagePath: savedBackgroundImagePath,
-            opacity: savedBackgroundImageOpacity
+            opacity: savedBackgroundImageOpacity,
+            autoCollapseEnabled: autoCollapseEnabled,
+            collapseDelay: compactCollapseDelay
         )
         settings.autoresizingMask = [.width, .height]
         settings.onChooseImage = { [weak self] in
@@ -1179,6 +1453,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         settings.onOpacityChanged = { [weak self] opacity in
             self?.setBackgroundImageOpacity(opacity)
+        }
+        settings.onAutoCollapseChanged = { [weak self] enabled in
+            self?.setAutoCollapseEnabled(enabled)
+        }
+        settings.onCollapseDelayChanged = { [weak self] delay in
+            self?.setCompactCollapseDelay(delay)
         }
         panel.contentView = settings
         panel.center()
@@ -1216,6 +1496,26 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         appearanceSettingsView?.updateOpacity(value)
     }
 
+    private func setAutoCollapseEnabled(_ enabled: Bool) {
+        UserDefaults.standard.set(enabled, forKey: AppearancePreference.autoCollapseEnabled)
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        if enabled {
+            if !pointerInsidePanel {
+                scheduleCompactCollapse()
+            }
+        } else {
+            setPanelCompact(false)
+        }
+        appearanceSettingsView?.updateAutoCollapse(enabled)
+    }
+
+    private func setCompactCollapseDelay(_ delay: TimeInterval) {
+        let value = min(max(delay.rounded(), 1), 10)
+        UserDefaults.standard.set(value, forKey: AppearancePreference.compactCollapseDelay)
+        appearanceSettingsView?.updateCollapseDelay(value)
+    }
+
     private func applySavedAppearance(to view: UsageView) {
         view.backgroundImage = savedBackgroundImage
         view.backgroundImageOpacity = savedBackgroundImageOpacity
@@ -1234,6 +1534,17 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let value = UserDefaults.standard.object(forKey: AppearancePreference.backgroundImageOpacity) as? Double
             ?? AppearancePreference.defaultBackgroundImageOpacity
         return CGFloat(min(max(value, 0), 1))
+    }
+
+    private var autoCollapseEnabled: Bool {
+        UserDefaults.standard.object(forKey: AppearancePreference.autoCollapseEnabled) as? Bool
+            ?? AppearancePreference.defaultAutoCollapseEnabled
+    }
+
+    private var compactCollapseDelay: TimeInterval {
+        let value = UserDefaults.standard.object(forKey: AppearancePreference.compactCollapseDelay) as? Double
+            ?? AppearancePreference.defaultCompactCollapseDelay
+        return min(max(value, 1), 10)
     }
 
     private func toolbarButton(title: String, action: Selector, frame: NSRect, color: NSColor) -> NSButton {
