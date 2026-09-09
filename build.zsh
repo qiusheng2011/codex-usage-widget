@@ -4,16 +4,44 @@ set -euo pipefail
 ROOT=${0:A:h}
 APP="$ROOT/AppBundle/Codex Usage Widget.app"
 DMG="$ROOT/AppBundle/Codex Usage Widget.dmg"
+ICON_SOURCE="$ROOT/assets/icon.png"
+ICON_RESOURCE="$APP/Contents/Resources/AppIcon.icns"
+
+if [[ ! -f "$ICON_SOURCE" ]]; then
+  print -u2 "Missing app icon source: $ICON_SOURCE"
+  exit 1
+fi
+
 mkdir -p "$APP/Contents/MacOS"
+mkdir -p "$APP/Contents/Resources"
 cp "$ROOT/AppBundle/Contents/Info.plist" "$APP/Contents/Info.plist"
 xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" -framework AppKit -o "$APP/Contents/MacOS/CodexUsageWidget"
+
+ICONSET_STAGING=""
+DMG_STAGING=""
+cleanup() {
+  if [[ -n "$ICONSET_STAGING" ]]; then
+    rm -rf "$ICONSET_STAGING"
+  fi
+  if [[ -n "$DMG_STAGING" ]]; then
+    rm -rf "$DMG_STAGING"
+  fi
+}
+trap cleanup EXIT
+
+ICONSET_STAGING=$(mktemp -d "$ROOT/AppBundle/.iconset.XXXXXX")
+ICONSET="$ICONSET_STAGING/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for size in 16 32 128 256 512; do
+  sips -z "$size" "$size" "$ICON_SOURCE" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  doubleSize=$((size * 2))
+  sips -z "$doubleSize" "$doubleSize" "$ICON_SOURCE" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"
+
 codesign --force --sign - "$APP" >/dev/null
 
 DMG_STAGING=$(mktemp -d "$ROOT/AppBundle/.dmg-staging.XXXXXX")
-cleanup() {
-  rm -rf "$DMG_STAGING"
-}
-trap cleanup EXIT
 cp -R "$APP" "$DMG_STAGING/"
 hdiutil create \
   -volname "Codex Usage Widget" \

@@ -13,6 +13,7 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 - The appearance settings support a custom background image and image opacity; the existing dark theme color remains overlaid, and automatic compact scaling can be enabled with a configurable 1–10 second delay
 - The menu bar can show live usage as `CODEX(5h 42% 1W 18%)`; its visibility is configurable and enabled by default
 - Drag the panel near a screen edge to snap and collapse it to a minimal 5-hour/long-cycle view; hover over it to restore the full panel
+- `assets/icon.png` is used as the application icon and is converted to a multi-resolution `AppIcon.icns` during the build
 - Appends every successful usage record to `~/Library/Application Support/Codex Usage Widget/usage-history.jsonl`; the history is kept outside the app bundle so app updates do not remove it
 
 It calls the local `codex app-server` in read-only mode. It does not read, copy, or save authentication tokens.

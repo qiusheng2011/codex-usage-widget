@@ -8,6 +8,8 @@
   <string>Codex Usage Widget</string>
   <key>CFBundleExecutable</key>
   <string>CodexUsageWidget</string>
+  <key>CFBundleIconFile</key>
+  <string>AppIcon.icns</string>
   <key>CFBundleIdentifier</key>
   <string>local.codex.usage-widget</string>
   <key>CFBundleName</key>
