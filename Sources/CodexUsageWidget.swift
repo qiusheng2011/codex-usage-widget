@@ -1,15 +1,104 @@
 import AppKit
 import Foundation
 
+private struct ManualResetCredit: Codable {
+    var resetType: String
+    var status: String
+    var title: String?
+    var description: String?
+    var expiresAt: TimeInterval?
+}
+
 private struct UsageSnapshot: Codable {
     var available: Bool
     var primaryUsedPercent: Int?
     var primaryWindowMinutes: Int?
     var primaryResetsAt: TimeInterval?
     var secondaryUsedPercent: Int?
+    var manualResetCount: Int?
+    var manualResetCredits: [ManualResetCredit]
     var latestDailyTokens: Int?
     var lifetimeTokens: Int?
     var fetchedAt: TimeInterval
+
+    private enum CodingKeys: String, CodingKey {
+        case available
+        case primaryUsedPercent
+        case primaryWindowMinutes
+        case primaryResetsAt
+        case secondaryUsedPercent
+        case manualResetCount
+        case manualResetCredits
+        case manualResetExpirations
+        case latestDailyTokens
+        case lifetimeTokens
+        case fetchedAt
+    }
+
+    init(
+        available: Bool,
+        primaryUsedPercent: Int?,
+        primaryWindowMinutes: Int?,
+        primaryResetsAt: TimeInterval?,
+        secondaryUsedPercent: Int?,
+        manualResetCount: Int?,
+        manualResetCredits: [ManualResetCredit],
+        latestDailyTokens: Int?,
+        lifetimeTokens: Int?,
+        fetchedAt: TimeInterval
+    ) {
+        self.available = available
+        self.primaryUsedPercent = primaryUsedPercent
+        self.primaryWindowMinutes = primaryWindowMinutes
+        self.primaryResetsAt = primaryResetsAt
+        self.secondaryUsedPercent = secondaryUsedPercent
+        self.manualResetCount = manualResetCount
+        self.manualResetCredits = manualResetCredits
+        self.latestDailyTokens = latestDailyTokens
+        self.lifetimeTokens = lifetimeTokens
+        self.fetchedAt = fetchedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        available = try container.decode(Bool.self, forKey: .available)
+        primaryUsedPercent = try container.decodeIfPresent(Int.self, forKey: .primaryUsedPercent)
+        primaryWindowMinutes = try container.decodeIfPresent(Int.self, forKey: .primaryWindowMinutes)
+        primaryResetsAt = try container.decodeIfPresent(TimeInterval.self, forKey: .primaryResetsAt)
+        secondaryUsedPercent = try container.decodeIfPresent(Int.self, forKey: .secondaryUsedPercent)
+        manualResetCount = try container.decodeIfPresent(Int.self, forKey: .manualResetCount)
+        if let credits = try container.decodeIfPresent([ManualResetCredit].self, forKey: .manualResetCredits) {
+            manualResetCredits = credits
+        } else {
+            let legacyExpirations = try container.decodeIfPresent([TimeInterval?].self, forKey: .manualResetExpirations) ?? []
+            manualResetCredits = legacyExpirations.map {
+                ManualResetCredit(
+                    resetType: "codexRateLimits",
+                    status: "available",
+                    title: nil,
+                    description: nil,
+                    expiresAt: $0
+                )
+            }
+        }
+        latestDailyTokens = try container.decodeIfPresent(Int.self, forKey: .latestDailyTokens)
+        lifetimeTokens = try container.decodeIfPresent(Int.self, forKey: .lifetimeTokens)
+        fetchedAt = try container.decode(TimeInterval.self, forKey: .fetchedAt)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(available, forKey: .available)
+        try container.encodeIfPresent(primaryUsedPercent, forKey: .primaryUsedPercent)
+        try container.encodeIfPresent(primaryWindowMinutes, forKey: .primaryWindowMinutes)
+        try container.encodeIfPresent(primaryResetsAt, forKey: .primaryResetsAt)
+        try container.encodeIfPresent(secondaryUsedPercent, forKey: .secondaryUsedPercent)
+        try container.encodeIfPresent(manualResetCount, forKey: .manualResetCount)
+        try container.encode(manualResetCredits, forKey: .manualResetCredits)
+        try container.encodeIfPresent(latestDailyTokens, forKey: .latestDailyTokens)
+        try container.encodeIfPresent(lifetimeTokens, forKey: .lifetimeTokens)
+        try container.encode(fetchedAt, forKey: .fetchedAt)
+    }
 
     static let loading = UsageSnapshot(
         available: false,
@@ -17,6 +106,8 @@ private struct UsageSnapshot: Codable {
         primaryWindowMinutes: nil,
         primaryResetsAt: nil,
         secondaryUsedPercent: nil,
+        manualResetCount: nil,
+        manualResetCredits: [],
         latestDailyTokens: nil,
         lifetimeTokens: nil,
         fetchedAt: Date().timeIntervalSince1970
@@ -65,15 +156,15 @@ private final class UsageHistoryStore {
         }
     }
 
-    func recentRecords(limit: Int) -> [UsageHistoryRecord] {
-        guard limit > 0, let fileURL,
+    func allRecords() -> [UsageHistoryRecord] {
+        guard let fileURL,
               let data = try? Data(contentsOf: fileURL),
               let text = String(data: data, encoding: .utf8) else { return [] }
 
         let records = text.split(whereSeparator: { $0.isNewline }).compactMap { line in
             try? JSONDecoder().decode(UsageHistoryRecord.self, from: Data(line.utf8))
         }
-        return Array(records.suffix(limit))
+        return records
     }
 }
 
@@ -318,6 +409,28 @@ private final class UsageClient {
         }
         let rawReset = doubleValue(primary?["resetsAt"])
         let resetAt = rawReset.map { $0 > 10_000_000_000 ? $0 / 1000 : $0 }
+        let resetCredits = rateLimitPayload["rateLimitResetCredits"] as? [String: Any]
+        let manualResetCount = intValue(resetCredits?["availableCount"])
+        let manualResetCredits: [ManualResetCredit] = (resetCredits?["credits"] as? [[String: Any]] ?? [])
+            .filter { ($0["status"] as? String ?? "available") == "available" }
+            .map { credit in
+                let rawExpiresAt = doubleValue(credit["expiresAt"])
+                let expiresAt = rawExpiresAt.map { $0 > 10_000_000_000 ? $0 / 1000 : $0 }
+                return ManualResetCredit(
+                    resetType: credit["resetType"] as? String ?? "unknown",
+                    status: credit["status"] as? String ?? "available",
+                    title: credit["title"] as? String,
+                    description: credit["description"] as? String,
+                    expiresAt: expiresAt
+                )
+            }
+            .sorted { lhs, rhs in
+                switch (lhs.expiresAt, rhs.expiresAt) {
+                case let (left?, right?): return left < right
+                case (_?, nil): return true
+                default: return false
+                }
+            }
 
         let snapshot = UsageSnapshot(
             available: primary != nil,
@@ -325,6 +438,8 @@ private final class UsageClient {
             primaryWindowMinutes: intValue(primary?["windowDurationMins"]),
             primaryResetsAt: resetAt,
             secondaryUsedPercent: intValue(secondary?["usedPercent"]),
+            manualResetCount: manualResetCount,
+            manualResetCredits: manualResetCredits,
             latestDailyTokens: intValue(latestBucket?["tokens"]),
             lifetimeTokens: intValue(summary?["lifetimeTokens"]),
             fetchedAt: Date().timeIntervalSince1970
@@ -359,9 +474,33 @@ private final class UsagePanel: NSPanel {
 }
 
 private final class UsageView: NSView {
-    var snapshot = UsageSnapshot.loading { didSet { needsDisplay = true } }
+    var onManualResetClick: (() -> Void)?
+    var snapshot = UsageSnapshot.loading {
+        didSet {
+            needsDisplay = true
+            updateManualResetButton()
+        }
+    }
+
+    private let manualResetButton = NSButton(title: "", target: nil, action: nil)
 
     override var isFlipped: Bool { true }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        configureManualResetButton()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configureManualResetButton()
+    }
+
+    override func layout() {
+        super.layout()
+        let width = min(125, max(100, bounds.width - 195))
+        manualResetButton.frame = NSRect(x: bounds.width - width - 18, y: 121, width: width, height: 20)
+    }
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
@@ -373,7 +512,7 @@ private final class UsageView: NSView {
         card.stroke()
 
         drawText("Codex·用量", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
-        drawText(snapshot.available ? "LIVE" : "读取中", at: NSPoint(x: 165, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
+        drawText(snapshot.available ? "LIVE" : "读取中", at: NSPoint(x: 92, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
 
         guard snapshot.available, let usedPercent = snapshot.primaryUsedPercent else {
             drawText("正在连接 Codex…", at: NSPoint(x: 18, y: 53), font: .systemFont(ofSize: 15, weight: .semibold), color: NSColor(white: 0.86, alpha: 1))
@@ -384,17 +523,18 @@ private final class UsageView: NSView {
 
         let windowLabel = limitLabel(snapshot.primaryWindowMinutes)
         drawText(windowLabel, at: NSPoint(x: 18, y: 50), font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.68, alpha: 1))
-        drawText(updateLabel(snapshot.fetchedAt), at: NSPoint(x: 126, y: 50), font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
+        drawRightAlignedText(updateLabel(snapshot.fetchedAt), rightX: bounds.width - 18, y: 50, font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
         drawText("\(usedPercent)% 已用", at: NSPoint(x: 18, y: 68), font: .systemFont(ofSize: 22, weight: .bold), color: .white)
         if let secondary = snapshot.secondaryUsedPercent {
-            drawText("长周期 \(secondary)%", at: NSPoint(x: 176, y: 75), font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.7, alpha: 1))
+            drawRightAlignedText("长周期 \(secondary)%", rightX: bounds.width - 18, y: 75, font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.7, alpha: 1))
         }
 
-        let track = NSBezierPath(roundedRect: NSRect(x: 18, y: 105, width: 254, height: 8), xRadius: 4, yRadius: 4)
+        let trackWidth = max(1, bounds.width - 36)
+        let track = NSBezierPath(roundedRect: NSRect(x: 18, y: 105, width: trackWidth, height: 8), xRadius: 4, yRadius: 4)
         NSColor(white: 0.25, alpha: 1).setFill()
         track.fill()
-        let width = 254 * CGFloat(min(max(usedPercent, 0), 100)) / 100
-        let progress = NSBezierPath(roundedRect: NSRect(x: 18, y: 105, width: width, height: 8), xRadius: 4, yRadius: 4)
+        let progressWidth = trackWidth * CGFloat(min(max(usedPercent, 0), 100)) / 100
+        let progress = NSBezierPath(roundedRect: NSRect(x: 18, y: 105, width: progressWidth, height: 8), xRadius: 4, yRadius: 4)
         progressColor(usedPercent).setFill()
         progress.fill()
 
@@ -402,6 +542,34 @@ private final class UsageView: NSView {
         let latest = tokenLabel(snapshot.latestDailyTokens)
         let total = tokenLabel(snapshot.lifetimeTokens)
         drawText("最近一天 \(latest)    累计 \(total)", at: NSPoint(x: 18, y: 146), font: .monospacedSystemFont(ofSize: 11, weight: .regular), color: NSColor(white: 0.82, alpha: 1))
+    }
+
+    private func configureManualResetButton() {
+        manualResetButton.bezelStyle = .inline
+        manualResetButton.isBordered = false
+        manualResetButton.font = .monospacedSystemFont(ofSize: 10, weight: .medium)
+        manualResetButton.contentTintColor = accentColor
+        manualResetButton.alignment = .right
+        manualResetButton.target = self
+        manualResetButton.action = #selector(manualResetTapped)
+        manualResetButton.toolTip = "查看每个手动重置的到期时间"
+        manualResetButton.setAccessibilityLabel("使用限额重置次数")
+        manualResetButton.isHidden = true
+        addSubview(manualResetButton)
+        updateManualResetButton()
+    }
+
+    private func updateManualResetButton() {
+        guard let count = snapshot.manualResetCount else {
+            manualResetButton.isHidden = true
+            return
+        }
+        manualResetButton.title = "使用限额重置 \(count) 次"
+        manualResetButton.isHidden = false
+    }
+
+    @objc private func manualResetTapped() {
+        onManualResetClick?()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -414,6 +582,11 @@ private final class UsageView: NSView {
 
     private func drawText(_ text: String, at point: NSPoint, font: NSFont, color: NSColor) {
         (text as NSString).draw(at: point, withAttributes: [.font: font, .foregroundColor: color])
+    }
+
+    private func drawRightAlignedText(_ text: String, rightX: CGFloat, y: CGFloat, font: NSFont, color: NSColor) {
+        let width = (text as NSString).size(withAttributes: [.font: font]).width
+        drawText(text, at: NSPoint(x: rightX - width, y: y), font: font, color: color)
     }
 
     private func progressColor(_ value: Int) -> NSColor {
@@ -453,8 +626,111 @@ private final class UsageView: NSView {
     }
 }
 
+private final class ManualResetDetailsView: NSView {
+    private var count: Int
+    private var credits: [ManualResetCredit]
+
+    init(count: Int, credits: [ManualResetCredit], frame frameRect: NSRect) {
+        self.count = count
+        self.credits = credits
+        super.init(frame: frameRect)
+    }
+
+    required init?(coder: NSCoder) {
+        count = 0
+        credits = []
+        super.init(coder: coder)
+    }
+
+    override var isFlipped: Bool { true }
+
+    func update(count: Int, credits: [ManualResetCredit]) {
+        self.count = count
+        self.credits = credits
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 0.98).setFill()
+        bounds.fill()
+
+        drawText("使用限额重置", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 15, weight: .bold), color: .white)
+        drawText("可用次数：\(count)", at: NSPoint(x: 18, y: 40), font: .systemFont(ofSize: 11), color: NSColor(white: 0.62, alpha: 1))
+
+        guard count > 0 else {
+            drawText("暂无可用的手动重置", at: NSPoint(x: 18, y: 78), font: .systemFont(ofSize: 13), color: NSColor(white: 0.65, alpha: 1))
+            return
+        }
+        guard !credits.isEmpty else {
+            drawText("当前接口未返回逐条到期时间", at: NSPoint(x: 18, y: 78), font: .systemFont(ofSize: 13), color: NSColor(white: 0.65, alpha: 1))
+            return
+        }
+
+        for (index, credit) in credits.enumerated() {
+            let title = displayTitle(credit.title)
+            let expiration = credit.expiresAt.map { dateLabel($0) } ?? "不设置到期时间"
+            let y = 74 + CGFloat(index) * 42
+            drawText("\(index + 1). \(title)", at: NSPoint(x: 18, y: y), font: .systemFont(ofSize: 12), color: NSColor(white: 0.82, alpha: 1))
+            drawText("到期：\(expiration)", at: NSPoint(x: 36, y: y + 19), font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
+        }
+        if credits.count < count {
+            drawText("部分重置的详细信息暂不可用", at: NSPoint(x: 18, y: 92 + CGFloat(credits.count) * 42), font: .systemFont(ofSize: 10), color: NSColor(white: 0.5, alpha: 1))
+        }
+    }
+
+    private func displayTitle(_ title: String?) -> String {
+        guard let title, !title.isEmpty else { return "使用限额重置" }
+        if title == "Full reset (Weekly + 5 hr)" {
+            return "完全重置（每周 + 5 小时）"
+        }
+        return title
+    }
+
+    private func drawText(_ text: String, at point: NSPoint, font: NSFont, color: NSColor) {
+        (text as NSString).draw(at: point, withAttributes: [.font: font, .foregroundColor: color])
+    }
+
+    private func dateLabel(_ timestamp: TimeInterval) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter.string(from: Date(timeIntervalSince1970: timestamp))
+    }
+}
+
+private enum ChartRange: Int {
+    case day
+    case week
+    case month
+    case all
+
+    var title: String {
+        switch self {
+        case .day: return "24 小时"
+        case .week: return "7 天"
+        case .month: return "30 天"
+        case .all: return "全部"
+        }
+    }
+}
+
+private enum ChartSeries: Int {
+    case primary
+    case secondary
+    case both
+}
+
 private final class UsageChartView: NSView {
     var records: [UsageHistoryRecord] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    var chartRange: ChartRange = .week {
+        didSet { needsDisplay = true }
+    }
+
+    var chartSeries: ChartSeries = .both {
         didSet { needsDisplay = true }
     }
 
@@ -465,31 +741,65 @@ private final class UsageChartView: NSView {
         NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 0.98).setFill()
         bounds.fill()
 
-        drawText("Codex·用量趋势", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 14, weight: .bold), color: .white)
-        drawText("最近 \(records.count) 条记录", at: NSPoint(x: 18, y: 38), font: .systemFont(ofSize: 10), color: NSColor(white: 0.55, alpha: 1))
+        let visibleRecords = filteredRecords()
+        drawText("Codex·用量趋势", at: NSPoint(x: 18, y: 14), font: .systemFont(ofSize: 15, weight: .bold), color: .white)
+        drawText(
+            "时间：\(chartRange.title)    当前显示 \(visibleRecords.count) 条 / 历史 \(records.count) 条",
+            at: NSPoint(x: 18, y: 37),
+            font: .systemFont(ofSize: 10),
+            color: NSColor(white: 0.58, alpha: 1)
+        )
 
-        guard !records.isEmpty else {
-            drawText("暂无历史数据", at: NSPoint(x: bounds.midX - 40, y: bounds.midY - 8), font: .systemFont(ofSize: 14, weight: .medium), color: NSColor(white: 0.65, alpha: 1))
+        let plot = NSRect(
+            x: 58,
+            y: 105,
+            width: max(1, bounds.width - 80),
+            height: max(1, bounds.height - 160)
+        )
+        guard !visibleRecords.isEmpty else {
+            drawText("当前筛选范围暂无数据", at: NSPoint(x: bounds.midX - 58, y: bounds.midY), font: .systemFont(ofSize: 14, weight: .medium), color: NSColor(white: 0.65, alpha: 1))
             return
         }
 
-        let plot = NSRect(
-            x: 52,
-            y: 58,
-            width: max(1, bounds.width - 72),
-            height: max(1, bounds.height - 108)
-        )
         drawGrid(in: plot)
-        drawSeries(records.map { $0.snapshot.primaryUsedPercent }, in: plot, color: accentColor)
-        drawSeries(records.map { $0.snapshot.secondaryUsedPercent }, in: plot, color: secondaryColor)
-        drawText("主周期", at: NSPoint(x: plot.minX, y: 40), font: .systemFont(ofSize: 10, weight: .medium), color: accentColor)
-        drawText("长周期", at: NSPoint(x: plot.minX + 52, y: 40), font: .systemFont(ofSize: 10, weight: .medium), color: secondaryColor)
+        switch chartSeries {
+        case .primary:
+            drawSeries(visibleRecords.map { $0.snapshot.primaryUsedPercent }, in: plot, color: accentColor)
+        case .secondary:
+            drawSeries(visibleRecords.map { $0.snapshot.secondaryUsedPercent }, in: plot, color: secondaryColor)
+        case .both:
+            drawSeries(visibleRecords.map { $0.snapshot.primaryUsedPercent }, in: plot, color: accentColor)
+            drawSeries(visibleRecords.map { $0.snapshot.secondaryUsedPercent }, in: plot, color: secondaryColor)
+        }
+        drawLegend(at: NSPoint(x: plot.minX, y: 82))
 
-        let firstDate = dateLabel(records.first?.recordedAt)
-        let lastDate = dateLabel(records.last?.recordedAt)
-        drawText(firstDate, at: NSPoint(x: plot.minX, y: plot.maxY + 12), font: .systemFont(ofSize: 9), color: NSColor(white: 0.5, alpha: 1))
-        let lastWidth = (lastDate as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 9)]).width
-        drawText(lastDate, at: NSPoint(x: plot.maxX - lastWidth, y: plot.maxY + 12), font: .systemFont(ofSize: 9), color: NSColor(white: 0.5, alpha: 1))
+        let firstDate = dateLabel(visibleRecords.first?.recordedAt)
+        let lastDate = dateLabel(visibleRecords.last?.recordedAt)
+        let dateFont = NSFont.systemFont(ofSize: 9)
+        drawText(firstDate, at: NSPoint(x: plot.minX, y: plot.maxY + 12), font: dateFont, color: NSColor(white: 0.5, alpha: 1))
+        let lastWidth = (lastDate as NSString).size(withAttributes: [.font: dateFont]).width
+        drawText(lastDate, at: NSPoint(x: plot.maxX - lastWidth, y: plot.maxY + 12), font: dateFont, color: NSColor(white: 0.5, alpha: 1))
+    }
+
+    private func filteredRecords() -> [UsageHistoryRecord] {
+        let sorted = records.sorted { $0.recordedAt < $1.recordedAt }
+        let cutoff: TimeInterval
+        switch chartRange {
+        case .day: cutoff = Date().timeIntervalSince1970 - 86_400
+        case .week: cutoff = Date().timeIntervalSince1970 - 604_800
+        case .month: cutoff = Date().timeIntervalSince1970 - 2_592_000
+        case .all: cutoff = 0
+        }
+        let matching = sorted.filter { $0.recordedAt >= cutoff }
+        return downsample(matching, maximum: 240)
+    }
+
+    private func downsample(_ records: [UsageHistoryRecord], maximum: Int) -> [UsageHistoryRecord] {
+        guard records.count > maximum, maximum > 1 else { return records }
+        return (0..<maximum).map { index in
+            let sourceIndex = Int((Double(index) * Double(records.count - 1) / Double(maximum - 1)).rounded())
+            return records[sourceIndex]
+        }
     }
 
     private func drawGrid(in plot: NSRect) {
@@ -502,6 +812,17 @@ private final class UsageChartView: NSView {
             line.lineWidth = value == 0 ? 1 : 0.5
             line.stroke()
             drawText("\(value)%", at: NSPoint(x: 16, y: y - 6), font: .systemFont(ofSize: 9), color: NSColor(white: 0.48, alpha: 1))
+        }
+    }
+
+    private func drawLegend(at point: NSPoint) {
+        var x = point.x
+        if chartSeries != .secondary {
+            drawText("主周期", at: NSPoint(x: x, y: point.y), font: .systemFont(ofSize: 10, weight: .medium), color: accentColor)
+            x += 54
+        }
+        if chartSeries != .primary {
+            drawText("长周期", at: NSPoint(x: x, y: point.y), font: .systemFont(ofSize: 10, weight: .medium), color: secondaryColor)
         }
     }
 
@@ -560,6 +881,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let historyStore = UsageHistoryStore()
     private var chartPanel: NSPanel?
     private var chartView: UsageChartView?
+    private var manualResetPanel: NSPanel?
+    private var manualResetDetailsView: ManualResetDetailsView?
+    private var latestSnapshot = UsageSnapshot.loading
     private var isOneShot = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -570,11 +894,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         usageClient.onUpdate = { [weak self] snapshot in
             guard let self else { return }
+            self.latestSnapshot = snapshot
             if self.isOneShot {
                 self.printSnapshotAndQuit(snapshot)
             } else {
                 self.usageView?.snapshot = snapshot
                 self.reloadChartIfVisible()
+                self.updateManualResetDetailsIfVisible()
             }
         }
         usageClient.start()
@@ -586,7 +912,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPanel() {
         let panel = UsagePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 340, height: 176),
+            contentRect: NSRect(x: 0, y: 0, width: 320, height: 176),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -601,11 +927,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let content = UsageView(frame: panel.contentView?.bounds ?? .zero)
         content.autoresizingMask = [.width, .height]
+        content.onManualResetClick = { [weak self] in
+            self?.showManualResetDetails()
+        }
+        let buttonRed = NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
         let chart = toolbarButton(
             title: "图表",
             action: #selector(showChart),
-            frame: NSRect(x: 205, y: 10, width: 40, height: 24),
-            color: NSColor(calibratedRed: 0.16, green: 0.32, blue: 0.48, alpha: 1)
+            frame: NSRect(x: 210, y: 11, width: 34, height: 22),
+            color: buttonRed
         )
         chart.toolTip = "查看历史图表"
         chart.setAccessibilityLabel("查看历史图表")
@@ -613,8 +943,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let refresh = toolbarButton(
             title: "刷新",
             action: #selector(forceRefresh),
-            frame: NSRect(x: 248, y: 10, width: 40, height: 24),
-            color: NSColor(calibratedRed: 0.78, green: 0.34, blue: 0.12, alpha: 1)
+            frame: NSRect(x: 244, y: 11, width: 34, height: 22),
+            color: buttonRed
         )
         refresh.toolTip = "立即刷新用量"
         refresh.setAccessibilityLabel("立即刷新用量")
@@ -622,8 +952,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let close = toolbarButton(
             title: "退出",
             action: #selector(quit),
-            frame: NSRect(x: 291, y: 10, width: 40, height: 24),
-            color: NSColor(calibratedRed: 0.72, green: 0.16, blue: 0.16, alpha: 1)
+            frame: NSRect(x: 278, y: 11, width: 35, height: 22),
+            color: buttonRed
         )
         close.toolTip = "关闭用量浮窗"
         close.setAccessibilityLabel("退出")
@@ -632,7 +962,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let screen = NSScreen.main ?? NSScreen.screens.first {
             let frame = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: frame.maxX - 370, y: frame.maxY - 196))
+            panel.setFrameOrigin(NSPoint(x: frame.maxX - 350, y: frame.maxY - 196))
         }
         panel.orderFrontRegardless()
         self.panel = panel
@@ -641,15 +971,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func toolbarButton(title: String, action: Selector, frame: NSRect, color: NSColor) -> NSButton {
         let button = NSButton(title: title, target: self, action: action)
-        button.bezelStyle = .rounded
-        button.isBordered = true
-        button.bezelColor = color
-        button.contentTintColor = .white
+        button.bezelStyle = .regularSquare
+        button.isBordered = false
+        button.wantsLayer = true
+        button.layer?.backgroundColor = NSColor.clear.cgColor
+        button.layer?.borderWidth = 0
+        let textColor = color
+        button.contentTintColor = textColor
         button.attributedTitle = NSAttributedString(
             string: title,
             attributes: [
-                .font: NSFont.systemFont(ofSize: 11, weight: .bold),
-                .foregroundColor: NSColor.white
+                .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold),
+                .foregroundColor: textColor
             ]
         )
         button.frame = frame
@@ -672,7 +1005,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 540, height: 340),
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 430),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -686,12 +1019,126 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let chart = UsageChartView(frame: panel.contentView?.bounds ?? .zero)
         chart.autoresizingMask = [.width, .height]
+        let rangeLabel = chartLabel("时间范围", frame: NSRect(x: 18, y: 59, width: 52, height: 18))
+        chart.addSubview(rangeLabel)
+        let rangeControl = NSSegmentedControl(
+            labels: ["24 小时", "7 天", "30 天", "全部"],
+            trackingMode: .selectOne,
+            target: nil,
+            action: nil
+        )
+        rangeControl.controlSize = .small
+        rangeControl.segmentStyle = .rounded
+        rangeControl.appearance = NSAppearance(named: .darkAqua)
+        rangeControl.selectedSegment = ChartRange.week.rawValue
+        rangeControl.frame = NSRect(x: 74, y: 56, width: 250, height: 24)
+        rangeControl.setAccessibilityLabel("历史图表时间范围")
+        rangeControl.target = self
+        rangeControl.action = #selector(chartRangeChanged(_:))
+        chart.addSubview(rangeControl)
+
+        let seriesLabel = chartLabel("指标", frame: NSRect(x: 348, y: 59, width: 34, height: 18))
+        chart.addSubview(seriesLabel)
+        let seriesControl = NSSegmentedControl(
+            labels: ["主周期", "长周期", "全部"],
+            trackingMode: .selectOne,
+            target: nil,
+            action: nil
+        )
+        seriesControl.controlSize = .small
+        seriesControl.segmentStyle = .rounded
+        seriesControl.appearance = NSAppearance(named: .darkAqua)
+        seriesControl.selectedSegment = ChartSeries.both.rawValue
+        seriesControl.frame = NSRect(x: 390, y: 56, width: 220, height: 24)
+        seriesControl.setAccessibilityLabel("历史图表指标")
+        seriesControl.target = self
+        seriesControl.action = #selector(chartSeriesChanged(_:))
+        chart.addSubview(seriesControl)
         panel.contentView = chart
         panel.center()
         panel.orderFrontRegardless()
         chartPanel = panel
         chartView = chart
         reloadChart()
+    }
+
+    private func chartLabel(_ text: String, frame: NSRect) -> NSTextField {
+        let label = NSTextField(labelWithString: text)
+        label.frame = frame
+        label.font = .systemFont(ofSize: 11, weight: .medium)
+        label.textColor = NSColor(white: 0.65, alpha: 1)
+        return label
+    }
+
+    private func showManualResetDetails() {
+        let snapshot = latestSnapshot
+        if let manualResetPanel {
+            manualResetDetailsView?.update(
+                count: snapshot.manualResetCount ?? 0,
+                credits: snapshot.manualResetCredits
+            )
+            resizeManualResetPanel(manualResetPanel, creditCount: snapshot.manualResetCredits.count)
+            manualResetPanel.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let credits = snapshot.manualResetCredits
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 360, height: manualResetPanelHeight(creditCount: credits.count)),
+            styleMask: [.titled, .closable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "使用限额重置"
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+
+        let details = ManualResetDetailsView(
+            count: snapshot.manualResetCount ?? 0,
+            credits: credits,
+            frame: panel.contentView?.bounds ?? .zero
+        )
+        details.autoresizingMask = [.width, .height]
+        panel.contentView = details
+        panel.center()
+        panel.orderFrontRegardless()
+        manualResetPanel = panel
+        manualResetDetailsView = details
+    }
+
+    private func updateManualResetDetailsIfVisible() {
+        guard manualResetPanel?.isVisible == true else { return }
+        manualResetDetailsView?.update(
+            count: latestSnapshot.manualResetCount ?? 0,
+            credits: latestSnapshot.manualResetCredits
+        )
+        if let manualResetPanel {
+            resizeManualResetPanel(manualResetPanel, creditCount: latestSnapshot.manualResetCredits.count)
+        }
+    }
+
+    private func manualResetPanelHeight(creditCount: Int) -> CGFloat {
+        max(210, min(420, 105 + CGFloat(max(creditCount, 1)) * 42))
+    }
+
+    private func resizeManualResetPanel(_ panel: NSPanel, creditCount: Int) {
+        var frame = panel.frame
+        let newHeight = manualResetPanelHeight(creditCount: creditCount)
+        let heightDelta = newHeight - frame.height
+        frame.origin.y -= heightDelta
+        frame.size.height = newHeight
+        panel.setFrame(frame, display: true, animate: false)
+    }
+
+    @objc private func chartRangeChanged(_ sender: NSSegmentedControl) {
+        chartView?.chartRange = ChartRange(rawValue: sender.selectedSegment) ?? .week
+    }
+
+    @objc private func chartSeriesChanged(_ sender: NSSegmentedControl) {
+        chartView?.chartSeries = ChartSeries(rawValue: sender.selectedSegment) ?? .both
     }
 
     private func reloadChartIfVisible() {
@@ -702,7 +1149,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private func reloadChart() {
         guard let chartView else { return }
         DispatchQueue.global(qos: .userInitiated).async { [historyStore] in
-            let records = historyStore.recentRecords(limit: 120)
+            let records = historyStore.allRecords()
             DispatchQueue.main.async { [weak chartView] in
                 chartView?.records = records
             }
