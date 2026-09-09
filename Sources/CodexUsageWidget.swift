@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import UniformTypeIdentifiers
+import UserNotifications
 
 private struct ManualResetCredit: Codable {
     var resetType: String
@@ -178,6 +179,66 @@ private final class UsageHistoryStore {
             try? JSONDecoder().decode(UsageHistoryRecord.self, from: Data(line.utf8))
         }
         return records
+    }
+}
+
+/// Schedules one local notification for the current five-hour rate-limit reset.
+/// The notification is delivered by macOS and does not require any network access.
+private final class PrimaryResetNotificationScheduler {
+    private let center = UNUserNotificationCenter.current()
+    private let requestIdentifier = "codex-usage-widget.primary-reset"
+    private var authorizationResolved = false
+    private var authorizationGranted = false
+    private var pendingResetAt: TimeInterval?
+
+    func requestAuthorization() {
+        center.requestAuthorization(options: [.alert, .sound]) { [weak self] granted, _ in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.authorizationResolved = true
+                self.authorizationGranted = granted
+                if granted {
+                    self.schedulePendingReset()
+                } else {
+                    self.center.removePendingNotificationRequests(withIdentifiers: [self.requestIdentifier])
+                }
+            }
+        }
+    }
+
+    func schedule(for snapshot: UsageSnapshot) {
+        guard snapshot.available, let resetAt = snapshot.primaryResetsAt else { return }
+        pendingResetAt = resetAt
+        guard authorizationResolved, authorizationGranted else { return }
+        schedule(resetAt: resetAt)
+    }
+
+    private func schedulePendingReset() {
+        guard let pendingResetAt else { return }
+        schedule(resetAt: pendingResetAt)
+    }
+
+    private func schedule(resetAt: TimeInterval) {
+        center.removePendingNotificationRequests(withIdentifiers: [requestIdentifier])
+
+        let interval = resetAt - Date().timeIntervalSince1970
+        guard interval > 1 else { return }
+
+        let content = UNMutableNotificationContent()
+        content.title = "5 小时额度已重置"
+        content.body = "额度已更新，可以继续使用。"
+        content.sound = .default
+
+        let trigger = UNTimeIntervalNotificationTrigger(
+            timeInterval: max(interval, 1),
+            repeats: false
+        )
+        let request = UNNotificationRequest(
+            identifier: requestIdentifier,
+            content: content,
+            trigger: trigger
+        )
+        center.add(request)
     }
 }
 
@@ -1209,6 +1270,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let compactPanelSize = NSSize(width: 126, height: 66)
     private let edgeSnapDistance: CGFloat = 28
     private let usageClient = UsageClient()
+    private let resetNotificationScheduler = PrimaryResetNotificationScheduler()
     private var panel: UsagePanel?
     private var menuBarStatusItem: NSStatusItem?
     private var usageView: UsageView?
@@ -1229,12 +1291,14 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         isOneShot = CommandLine.arguments.contains("--once")
         if !isOneShot {
             NSApp.setActivationPolicy(.accessory)
+            resetNotificationScheduler.requestAuthorization()
             configureMenuBarStatusItem()
             showPanel()
         }
         usageClient.onUpdate = { [weak self] snapshot in
             guard let self else { return }
             self.latestSnapshot = snapshot
+            self.resetNotificationScheduler.schedule(for: snapshot)
             self.updateMenuBarStatus(snapshot)
             if self.isOneShot {
                 self.printSnapshotAndQuit(snapshot)

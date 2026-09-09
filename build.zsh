@@ -15,7 +15,7 @@ fi
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
 cp "$ROOT/AppBundle/Contents/Info.plist" "$APP/Contents/Info.plist"
-xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" -framework AppKit -o "$APP/Contents/MacOS/CodexUsageWidget"
+xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" -framework AppKit -framework UserNotifications -o "$APP/Contents/MacOS/CodexUsageWidget"
 
 ICONSET_STAGING=""
 DMG_STAGING=""

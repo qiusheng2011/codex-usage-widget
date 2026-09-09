@@ -7,6 +7,7 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 ![Codex Usage Widget preview](assets/preview.png)
 
 - Primary Codex rate-limit percentage and reset time
+- Sends a macOS local notification when the five-hour rate-limit window resets; notification permission is requested on first launch
 - Secondary rate-limit percentage when the account provides one
 - Latest available daily token bucket and cumulative token count
 - Refreshes every 30 seconds, retrying every 1 second after a failed update; the panel shows the update time, a force-refresh button, and an exit button
