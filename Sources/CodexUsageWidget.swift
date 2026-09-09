@@ -1509,7 +1509,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(menuBarStatusItemClicked)
-            button.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+            button.font = menuBarFont
+            button.contentTintColor = menuBarAccentColor
             button.toolTip = "打开 Codex 用量浮窗"
         }
         menuBarStatusItem = statusItem
@@ -1521,7 +1522,22 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let button = menuBarStatusItem?.button else { return }
         let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
         let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
-        button.title = "CODEX(5h:\(primary)|1W:\(secondary))"
+        let title = "CODEX(5h:\(primary)|1W:\(secondary))"
+        button.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: menuBarFont,
+                .foregroundColor: menuBarAccentColor
+            ]
+        )
+    }
+
+    private var menuBarFont: NSFont {
+        NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+    }
+
+    private var menuBarAccentColor: NSColor {
+        NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
     }
 
     @objc private func menuBarStatusItemClicked() {
