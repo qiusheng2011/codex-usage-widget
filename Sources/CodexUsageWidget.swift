@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UniformTypeIdentifiers
 
 private struct ManualResetCredit: Codable {
     var resetType: String
@@ -7,6 +8,12 @@ private struct ManualResetCredit: Codable {
     var title: String?
     var description: String?
     var expiresAt: TimeInterval?
+}
+
+private enum AppearancePreference {
+    static let backgroundImagePath = "appearance.backgroundImagePath"
+    static let backgroundImageOpacity = "appearance.backgroundImageOpacity"
+    static let defaultBackgroundImageOpacity = 0.28
 }
 
 private struct UsageSnapshot: Codable {
@@ -481,6 +488,12 @@ private final class UsageView: NSView {
             updateManualResetButton()
         }
     }
+    var backgroundImage: NSImage? {
+        didSet { needsDisplay = true }
+    }
+    var backgroundImageOpacity: CGFloat = 0.28 {
+        didSet { needsDisplay = true }
+    }
 
     private let manualResetButton = NSButton(title: "", target: nil, action: nil)
 
@@ -507,6 +520,7 @@ private final class UsageView: NSView {
         let card = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 16, yRadius: 16)
         NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 0.95).setFill()
         card.fill()
+        drawBackgroundImage(in: card)
         NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 0.5).setStroke()
         card.lineWidth = 1
         card.stroke()
@@ -566,6 +580,36 @@ private final class UsageView: NSView {
         }
         manualResetButton.title = "使用限额重置 \(count) 次"
         manualResetButton.isHidden = false
+    }
+
+    private func drawBackgroundImage(in card: NSBezierPath) {
+        guard let backgroundImage,
+              backgroundImageOpacity > 0,
+              backgroundImage.size.width > 0,
+              backgroundImage.size.height > 0 else { return }
+
+        NSGraphicsContext.saveGraphicsState()
+        card.addClip()
+        let imageSize = backgroundImage.size
+        let scale = max(bounds.width / imageSize.width, bounds.height / imageSize.height)
+        let drawSize = NSSize(width: imageSize.width * scale, height: imageSize.height * scale)
+        let drawRect = NSRect(
+            x: bounds.midX - drawSize.width / 2,
+            y: bounds.midY - drawSize.height / 2,
+            width: drawSize.width,
+            height: drawSize.height
+        )
+        backgroundImage.draw(
+            in: drawRect,
+            from: NSRect(origin: .zero, size: imageSize),
+            operation: .sourceOver,
+            fraction: min(max(backgroundImageOpacity, 0), 1),
+            respectFlipped: isFlipped,
+            hints: nil
+        )
+        NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 0.48).setFill()
+        card.fill()
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     @objc private func manualResetTapped() {
@@ -874,6 +918,125 @@ private final class UsageChartView: NSView {
     }
 }
 
+private final class AppearanceSettingsView: NSView {
+    var onChooseImage: (() -> Void)?
+    var onClearImage: (() -> Void)?
+    var onOpacityChanged: ((CGFloat) -> Void)?
+
+    private let imagePathLabel = NSTextField(labelWithString: "")
+    private let opacitySlider = NSSlider(value: 0.28, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let opacityValueLabel = NSTextField(labelWithString: "28%")
+    private let chooseButton = NSButton(title: "选择图片", target: nil, action: nil)
+    private let clearButton = NSButton(title: "清除图片", target: nil, action: nil)
+    private let hintLabel = NSTextField(labelWithString: "主题色保持为当前深色主题，图片只会作为半透明背景叠加。")
+
+    override var isFlipped: Bool { true }
+
+    init(imagePath: String?, opacity: CGFloat) {
+        super.init(frame: .zero)
+        configure(imagePath: imagePath, opacity: opacity)
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        configure(imagePath: nil, opacity: 0.28)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 1).setFill()
+        bounds.fill()
+    }
+
+    override func layout() {
+        super.layout()
+        let width = bounds.width
+        imagePathLabel.frame = NSRect(x: 18, y: 40, width: max(1, width - 36), height: 20)
+        chooseButton.frame = NSRect(x: 18, y: 68, width: 88, height: 26)
+        clearButton.frame = NSRect(x: 112, y: 68, width: 88, height: 26)
+        opacitySlider.frame = NSRect(x: 112, y: 112, width: max(120, width - 174), height: 20)
+        opacityValueLabel.frame = NSRect(x: width - 54, y: 112, width: 42, height: 20)
+        hintLabel.frame = NSRect(x: 18, y: 154, width: max(1, width - 36), height: 20)
+    }
+
+    func updateImagePath(_ path: String?) {
+        imagePathLabel.stringValue = path ?? "未选择（当前使用纯色背景）"
+    }
+
+    func updateOpacity(_ opacity: CGFloat) {
+        let value = min(max(opacity, 0), 1)
+        opacitySlider.doubleValue = Double(value)
+        opacityValueLabel.stringValue = "\(Int((value * 100).rounded()))%"
+    }
+
+    @objc private func chooseImage() {
+        onChooseImage?()
+    }
+
+    @objc private func clearImage() {
+        onClearImage?()
+    }
+
+    @objc private func opacitySliderChanged() {
+        onOpacityChanged?(CGFloat(opacitySlider.doubleValue))
+    }
+
+    private func configure(imagePath: String?, opacity: CGFloat) {
+        wantsLayer = true
+        addSubview(label("背景图片", frame: NSRect(x: 18, y: 16, width: 100, height: 20), size: 12, weight: .semibold, color: .white))
+        imagePathLabel.font = .systemFont(ofSize: 11)
+        imagePathLabel.textColor = NSColor(white: 0.6, alpha: 1)
+        imagePathLabel.lineBreakMode = .byTruncatingMiddle
+        addSubview(imagePathLabel)
+
+        configureButton(chooseButton)
+        configureButton(clearButton)
+        chooseButton.target = self
+        chooseButton.action = #selector(chooseImage)
+        clearButton.target = self
+        clearButton.action = #selector(clearImage)
+        addSubview(chooseButton)
+        addSubview(clearButton)
+
+        addSubview(label("图片透明度", frame: NSRect(x: 18, y: 112, width: 86, height: 20), size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1)))
+        opacitySlider.controlSize = .small
+        opacitySlider.isContinuous = true
+        opacitySlider.target = self
+        opacitySlider.action = #selector(opacitySliderChanged)
+        addSubview(opacitySlider)
+        opacityValueLabel.alignment = .right
+        opacityValueLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+        opacityValueLabel.textColor = NSColor(white: 0.78, alpha: 1)
+        addSubview(opacityValueLabel)
+
+        hintLabel.font = .systemFont(ofSize: 10)
+        hintLabel.textColor = NSColor(white: 0.5, alpha: 1)
+        hintLabel.lineBreakMode = .byTruncatingTail
+        addSubview(hintLabel)
+        updateImagePath(imagePath)
+        updateOpacity(opacity)
+    }
+
+    private func configureButton(_ button: NSButton) {
+        button.bezelStyle = .rounded
+        button.controlSize = .small
+        button.contentTintColor = accentColor
+        button.font = .systemFont(ofSize: 11, weight: .medium)
+    }
+
+    private func label(_ text: String, frame: NSRect, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSTextField {
+        let field = NSTextField(labelWithString: text)
+        field.frame = frame
+        field.font = .systemFont(ofSize: size, weight: weight)
+        field.textColor = color
+        return field
+    }
+
+    private var accentColor: NSColor {
+        NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.26, alpha: 1)
+    }
+}
+
 private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let usageClient = UsageClient()
     private var panel: UsagePanel?
@@ -883,6 +1046,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var chartView: UsageChartView?
     private var manualResetPanel: NSPanel?
     private var manualResetDetailsView: ManualResetDetailsView?
+    private var appearanceSettingsPanel: NSPanel?
+    private var appearanceSettingsView: AppearanceSettingsView?
     private var latestSnapshot = UsageSnapshot.loading
     private var isOneShot = false
 
@@ -927,10 +1092,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let content = UsageView(frame: panel.contentView?.bounds ?? .zero)
         content.autoresizingMask = [.width, .height]
+        applySavedAppearance(to: content)
         content.onManualResetClick = { [weak self] in
             self?.showManualResetDetails()
         }
         let buttonRed = NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
+        let settings = toolbarButton(
+            title: "设置",
+            action: #selector(showAppearanceSettings),
+            frame: NSRect(x: 174, y: 11, width: 36, height: 22),
+            color: buttonRed
+        )
+        settings.toolTip = "设置背景图片和图片透明度"
+        settings.setAccessibilityLabel("外观设置")
+        content.addSubview(settings)
         let chart = toolbarButton(
             title: "图表",
             action: #selector(showChart),
@@ -967,6 +1142,98 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderFrontRegardless()
         self.panel = panel
         usageView = content
+    }
+
+    @objc private func showAppearanceSettings() {
+        if let appearanceSettingsPanel {
+            appearanceSettingsView?.updateImagePath(savedBackgroundImagePath)
+            appearanceSettingsView?.updateOpacity(savedBackgroundImageOpacity)
+            appearanceSettingsPanel.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 196),
+            styleMask: [.titled, .closable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "外观设置"
+        panel.appearance = NSAppearance(named: .darkAqua)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+
+        let settings = AppearanceSettingsView(
+            imagePath: savedBackgroundImagePath,
+            opacity: savedBackgroundImageOpacity
+        )
+        settings.autoresizingMask = [.width, .height]
+        settings.onChooseImage = { [weak self] in
+            self?.chooseBackgroundImage()
+        }
+        settings.onClearImage = { [weak self] in
+            self?.clearBackgroundImage()
+        }
+        settings.onOpacityChanged = { [weak self] opacity in
+            self?.setBackgroundImageOpacity(opacity)
+        }
+        panel.contentView = settings
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        appearanceSettingsPanel = panel
+        appearanceSettingsView = settings
+    }
+
+    private func chooseBackgroundImage() {
+        let chooser = NSOpenPanel()
+        chooser.title = "选择背景图片"
+        chooser.message = "图片会以当前主题色为底进行半透明叠加"
+        chooser.canChooseFiles = true
+        chooser.canChooseDirectories = false
+        chooser.allowsMultipleSelection = false
+        chooser.allowedContentTypes = [.image]
+        guard chooser.runModal() == .OK, let url = chooser.url,
+              let image = NSImage(contentsOf: url) else { return }
+
+        UserDefaults.standard.set(url.path, forKey: AppearancePreference.backgroundImagePath)
+        usageView?.backgroundImage = image
+        appearanceSettingsView?.updateImagePath(url.path)
+    }
+
+    private func clearBackgroundImage() {
+        UserDefaults.standard.removeObject(forKey: AppearancePreference.backgroundImagePath)
+        usageView?.backgroundImage = nil
+        appearanceSettingsView?.updateImagePath(nil)
+    }
+
+    private func setBackgroundImageOpacity(_ opacity: CGFloat) {
+        let value = min(max(opacity, 0), 1)
+        UserDefaults.standard.set(Double(value), forKey: AppearancePreference.backgroundImageOpacity)
+        usageView?.backgroundImageOpacity = value
+        appearanceSettingsView?.updateOpacity(value)
+    }
+
+    private func applySavedAppearance(to view: UsageView) {
+        view.backgroundImage = savedBackgroundImage
+        view.backgroundImageOpacity = savedBackgroundImageOpacity
+    }
+
+    private var savedBackgroundImagePath: String? {
+        UserDefaults.standard.string(forKey: AppearancePreference.backgroundImagePath)
+    }
+
+    private var savedBackgroundImage: NSImage? {
+        guard let path = savedBackgroundImagePath else { return nil }
+        return NSImage(contentsOfFile: path)
+    }
+
+    private var savedBackgroundImageOpacity: CGFloat {
+        let value = UserDefaults.standard.object(forKey: AppearancePreference.backgroundImageOpacity) as? Double
+            ?? AppearancePreference.defaultBackgroundImageOpacity
+        return CGFloat(min(max(value, 0), 1))
     }
 
     private func toolbarButton(title: String, action: Selector, frame: NSRect, color: NSColor) -> NSButton {
