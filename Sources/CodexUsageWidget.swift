@@ -15,9 +15,11 @@ private enum AppearancePreference {
     static let backgroundImageOpacity = "appearance.backgroundImageOpacity"
     static let autoCollapseEnabled = "appearance.autoCollapseEnabled"
     static let compactCollapseDelay = "appearance.compactCollapseDelay"
+    static let menuBarStatusVisible = "appearance.menuBarStatusVisible"
     static let defaultBackgroundImageOpacity = 0.28
     static let defaultAutoCollapseEnabled = true
     static let defaultCompactCollapseDelay = 2.0
+    static let defaultMenuBarStatusVisible = true
 }
 
 private struct UsageSnapshot: Codable {
@@ -990,6 +992,7 @@ private final class AppearanceSettingsView: NSView {
     var onOpacityChanged: ((CGFloat) -> Void)?
     var onAutoCollapseChanged: ((Bool) -> Void)?
     var onCollapseDelayChanged: ((TimeInterval) -> Void)?
+    var onMenuBarVisibilityChanged: ((Bool) -> Void)?
 
     private let imagePathLabel = NSTextField(labelWithString: "")
     private let opacitySlider = NSSlider(value: 0.28, minValue: 0, maxValue: 1, target: nil, action: nil)
@@ -997,19 +1000,27 @@ private final class AppearanceSettingsView: NSView {
     private let chooseButton = NSButton(title: "选择图片", target: nil, action: nil)
     private let clearButton = NSButton(title: "清除图片", target: nil, action: nil)
     private let autoCollapseButton = NSButton(checkboxWithTitle: "自动缩放为极简卡片", target: nil, action: nil)
+    private let menuBarButton = NSButton(checkboxWithTitle: "菜单栏显示 CODEX", target: nil, action: nil)
     private let collapseDelaySlider = NSSlider(value: 2, minValue: 1, maxValue: 10, target: nil, action: nil)
     private let collapseDelayValueLabel = NSTextField(labelWithString: "2 秒")
     private let hintLabel = NSTextField(labelWithString: "主题色保持为当前深色主题，图片只会作为半透明背景叠加。")
 
     override var isFlipped: Bool { true }
 
-    init(imagePath: String?, opacity: CGFloat, autoCollapseEnabled: Bool, collapseDelay: TimeInterval) {
+    init(
+        imagePath: String?,
+        opacity: CGFloat,
+        autoCollapseEnabled: Bool,
+        collapseDelay: TimeInterval,
+        menuBarVisible: Bool
+    ) {
         super.init(frame: .zero)
         configure(
             imagePath: imagePath,
             opacity: opacity,
             autoCollapseEnabled: autoCollapseEnabled,
-            collapseDelay: collapseDelay
+            collapseDelay: collapseDelay,
+            menuBarVisible: menuBarVisible
         )
     }
 
@@ -1019,7 +1030,8 @@ private final class AppearanceSettingsView: NSView {
             imagePath: nil,
             opacity: 0.28,
             autoCollapseEnabled: true,
-            collapseDelay: 2
+            collapseDelay: 2,
+            menuBarVisible: true
         )
     }
 
@@ -1038,6 +1050,7 @@ private final class AppearanceSettingsView: NSView {
         opacitySlider.frame = NSRect(x: 112, y: 112, width: max(120, width - 174), height: 20)
         opacityValueLabel.frame = NSRect(x: width - 54, y: 112, width: 42, height: 20)
         autoCollapseButton.frame = NSRect(x: 18, y: 144, width: 220, height: 20)
+        menuBarButton.frame = NSRect(x: 232, y: 144, width: max(1, width - 250), height: 20)
         collapseDelaySlider.frame = NSRect(x: 112, y: 178, width: max(120, width - 174), height: 20)
         collapseDelayValueLabel.frame = NSRect(x: width - 54, y: 178, width: 42, height: 20)
         hintLabel.frame = NSRect(x: 18, y: 220, width: max(1, width - 36), height: 20)
@@ -1067,6 +1080,10 @@ private final class AppearanceSettingsView: NSView {
         collapseDelayValueLabel.stringValue = "\(Int(value)) 秒"
     }
 
+    func updateMenuBarVisible(_ visible: Bool) {
+        menuBarButton.state = visible ? .on : .off
+    }
+
     @objc private func chooseImage() {
         onChooseImage?()
     }
@@ -1087,11 +1104,16 @@ private final class AppearanceSettingsView: NSView {
         onCollapseDelayChanged?(collapseDelaySlider.doubleValue.rounded())
     }
 
+    @objc private func menuBarVisibilityChanged() {
+        onMenuBarVisibilityChanged?(menuBarButton.state == .on)
+    }
+
     private func configure(
         imagePath: String?,
         opacity: CGFloat,
         autoCollapseEnabled: Bool,
-        collapseDelay: TimeInterval
+        collapseDelay: TimeInterval,
+        menuBarVisible: Bool
     ) {
         wantsLayer = true
         addSubview(label("背景图片", frame: NSRect(x: 18, y: 16, width: 100, height: 20), size: 12, weight: .semibold, color: .white))
@@ -1126,6 +1148,12 @@ private final class AppearanceSettingsView: NSView {
         autoCollapseButton.action = #selector(autoCollapseChanged)
         addSubview(autoCollapseButton)
 
+        menuBarButton.font = .systemFont(ofSize: 11, weight: .medium)
+        menuBarButton.contentTintColor = NSColor(white: 0.82, alpha: 1)
+        menuBarButton.target = self
+        menuBarButton.action = #selector(menuBarVisibilityChanged)
+        addSubview(menuBarButton)
+
         addSubview(label("缩放等待", frame: NSRect(x: 18, y: 178, width: 86, height: 20), size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1)))
         collapseDelaySlider.controlSize = .small
         collapseDelaySlider.numberOfTickMarks = 10
@@ -1146,6 +1174,7 @@ private final class AppearanceSettingsView: NSView {
         updateOpacity(opacity)
         updateAutoCollapse(autoCollapseEnabled)
         updateCollapseDelay(collapseDelay)
+        updateMenuBarVisible(menuBarVisible)
     }
 
     private func configureButton(_ button: NSButton) {
@@ -1181,6 +1210,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let edgeSnapDistance: CGFloat = 28
     private let usageClient = UsageClient()
     private var panel: UsagePanel?
+    private var menuBarStatusItem: NSStatusItem?
     private var usageView: UsageView?
     private let historyStore = UsageHistoryStore()
     private var chartPanel: NSPanel?
@@ -1199,11 +1229,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         isOneShot = CommandLine.arguments.contains("--once")
         if !isOneShot {
             NSApp.setActivationPolicy(.accessory)
+            configureMenuBarStatusItem()
             showPanel()
         }
         usageClient.onUpdate = { [weak self] snapshot in
             guard let self else { return }
             self.latestSnapshot = snapshot
+            self.updateMenuBarStatus(snapshot)
             if self.isOneShot {
                 self.printSnapshotAndQuit(snapshot)
             } else {
@@ -1420,6 +1452,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             appearanceSettingsView?.updateOpacity(savedBackgroundImageOpacity)
             appearanceSettingsView?.updateAutoCollapse(autoCollapseEnabled)
             appearanceSettingsView?.updateCollapseDelay(compactCollapseDelay)
+            appearanceSettingsView?.updateMenuBarVisible(menuBarStatusVisible)
             appearanceSettingsPanel.makeKeyAndOrderFront(nil)
             return
         }
@@ -1442,7 +1475,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             imagePath: savedBackgroundImagePath,
             opacity: savedBackgroundImageOpacity,
             autoCollapseEnabled: autoCollapseEnabled,
-            collapseDelay: compactCollapseDelay
+            collapseDelay: compactCollapseDelay,
+            menuBarVisible: menuBarStatusVisible
         )
         settings.autoresizingMask = [.width, .height]
         settings.onChooseImage = { [weak self] in
@@ -1460,11 +1494,47 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onCollapseDelayChanged = { [weak self] delay in
             self?.setCompactCollapseDelay(delay)
         }
+        settings.onMenuBarVisibilityChanged = { [weak self] visible in
+            self?.setMenuBarStatusVisible(visible)
+        }
         panel.contentView = settings
         panel.center()
         panel.makeKeyAndOrderFront(nil)
         appearanceSettingsPanel = panel
         appearanceSettingsView = settings
+    }
+
+    private func configureMenuBarStatusItem() {
+        let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        if let button = statusItem.button {
+            button.target = self
+            button.action = #selector(menuBarStatusItemClicked)
+            button.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
+            button.toolTip = "打开 Codex 用量浮窗"
+        }
+        menuBarStatusItem = statusItem
+        statusItem.isVisible = menuBarStatusVisible
+        updateMenuBarStatus(latestSnapshot)
+    }
+
+    private func updateMenuBarStatus(_ snapshot: UsageSnapshot) {
+        guard let button = menuBarStatusItem?.button else { return }
+        let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
+        let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
+        button.title = "CODEX(5h \(primary) 1W \(secondary))"
+    }
+
+    @objc private func menuBarStatusItemClicked() {
+        guard let panel else {
+            showPanel()
+            return
+        }
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        if panelEdge != nil {
+            setPanelCompact(false)
+        }
+        panel.orderFrontRegardless()
     }
 
     private func chooseBackgroundImage() {
@@ -1516,6 +1586,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         appearanceSettingsView?.updateCollapseDelay(value)
     }
 
+    private func setMenuBarStatusVisible(_ visible: Bool) {
+        UserDefaults.standard.set(visible, forKey: AppearancePreference.menuBarStatusVisible)
+        menuBarStatusItem?.isVisible = visible
+        appearanceSettingsView?.updateMenuBarVisible(visible)
+    }
+
     private func applySavedAppearance(to view: UsageView) {
         view.backgroundImage = savedBackgroundImage
         view.backgroundImageOpacity = savedBackgroundImageOpacity
@@ -1545,6 +1621,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let value = UserDefaults.standard.object(forKey: AppearancePreference.compactCollapseDelay) as? Double
             ?? AppearancePreference.defaultCompactCollapseDelay
         return min(max(value, 1), 10)
+    }
+
+    private var menuBarStatusVisible: Bool {
+        UserDefaults.standard.object(forKey: AppearancePreference.menuBarStatusVisible) as? Bool
+            ?? AppearancePreference.defaultMenuBarStatusVisible
     }
 
     private func toolbarButton(title: String, action: Selector, frame: NSRect, color: NSColor) -> NSButton {
