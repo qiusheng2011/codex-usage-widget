@@ -1509,6 +1509,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusItem.button {
             button.target = self
             button.action = #selector(menuBarStatusItemClicked)
+            button.title = ""
+            button.attributedTitle = NSAttributedString(string: "")
             button.font = menuBarFont
             button.contentTintColor = menuBarAccentColor
             button.imagePosition = .imageOnly
@@ -1525,7 +1527,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
         let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
         let title = "CODEX(5h:\(primary)|1W:\(secondary))"
-        button.title = title
+        button.title = ""
+        button.attributedTitle = NSAttributedString(string: "")
         button.image = menuBarImage(title: title)
         button.setAccessibilityLabel(title)
     }
