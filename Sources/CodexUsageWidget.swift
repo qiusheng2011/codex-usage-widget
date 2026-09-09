@@ -1511,6 +1511,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(menuBarStatusItemClicked)
             button.font = menuBarFont
             button.contentTintColor = menuBarAccentColor
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleNone
             button.toolTip = "打开 Codex 用量浮窗"
         }
         menuBarStatusItem = statusItem
@@ -1523,13 +1525,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
         let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
         let title = "CODEX(5h:\(primary)|1W:\(secondary))"
-        button.attributedTitle = NSAttributedString(
-            string: title,
-            attributes: [
-                .font: menuBarFont,
-                .foregroundColor: menuBarAccentColor
-            ]
-        )
+        button.title = title
+        button.image = menuBarImage(title: title)
+        button.setAccessibilityLabel(title)
     }
 
     private var menuBarFont: NSFont {
@@ -1538,6 +1536,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var menuBarAccentColor: NSColor {
         NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
+    }
+
+    private func menuBarImage(title: String) -> NSImage {
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: menuBarFont,
+            .foregroundColor: menuBarAccentColor
+        ]
+        let textSize = (title as NSString).size(withAttributes: attributes)
+        let image = NSImage(size: NSSize(width: ceil(textSize.width) + 4, height: 20))
+        image.lockFocus()
+        (title as NSString).draw(
+            at: NSPoint(x: 2, y: max(0, (image.size.height - textSize.height) / 2)),
+            withAttributes: attributes
+        )
+        image.unlockFocus()
+        image.isTemplate = false
+        return image
     }
 
     @objc private func menuBarStatusItemClicked() {
