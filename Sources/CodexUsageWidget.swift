@@ -64,6 +64,17 @@ private final class UsageHistoryStore {
             // History is supplementary; a storage error must not interrupt live updates.
         }
     }
+
+    func recentRecords(limit: Int) -> [UsageHistoryRecord] {
+        guard limit > 0, let fileURL,
+              let data = try? Data(contentsOf: fileURL),
+              let text = String(data: data, encoding: .utf8) else { return [] }
+
+        let records = text.split(whereSeparator: { $0.isNewline }).compactMap { line in
+            try? JSONDecoder().decode(UsageHistoryRecord.self, from: Data(line.utf8))
+        }
+        return Array(records.suffix(limit))
+    }
 }
 
 /// A read-only JSON-RPC client for the locally installed Codex app server.
@@ -362,7 +373,7 @@ private final class UsageView: NSView {
         card.stroke()
 
         drawText("Codex·用量", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
-        drawText(snapshot.available ? "LIVE" : "读取中", at: NSPoint(x: 178, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
+        drawText(snapshot.available ? "LIVE" : "读取中", at: NSPoint(x: 165, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
 
         guard snapshot.available, let usedPercent = snapshot.primaryUsedPercent else {
             drawText("正在连接 Codex…", at: NSPoint(x: 18, y: 53), font: .systemFont(ofSize: 15, weight: .semibold), color: NSColor(white: 0.86, alpha: 1))
@@ -373,6 +384,7 @@ private final class UsageView: NSView {
 
         let windowLabel = limitLabel(snapshot.primaryWindowMinutes)
         drawText(windowLabel, at: NSPoint(x: 18, y: 50), font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.68, alpha: 1))
+        drawText(updateLabel(snapshot.fetchedAt), at: NSPoint(x: 126, y: 50), font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
         drawText("\(usedPercent)% 已用", at: NSPoint(x: 18, y: 68), font: .systemFont(ofSize: 22, weight: .bold), color: .white)
         if let secondary = snapshot.secondaryUsedPercent {
             drawText("长周期 \(secondary)%", at: NSPoint(x: 176, y: 75), font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.7, alpha: 1))
@@ -390,7 +402,6 @@ private final class UsageView: NSView {
         let latest = tokenLabel(snapshot.latestDailyTokens)
         let total = tokenLabel(snapshot.lifetimeTokens)
         drawText("最近一天 \(latest)    累计 \(total)", at: NSPoint(x: 18, y: 146), font: .monospacedSystemFont(ofSize: 11, weight: .regular), color: NSColor(white: 0.82, alpha: 1))
-        drawText(updateLabel(snapshot.fetchedAt), at: NSPoint(x: 18, y: 162), font: .systemFont(ofSize: 10), color: NSColor(white: 0.52, alpha: 1))
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -442,10 +453,113 @@ private final class UsageView: NSView {
     }
 }
 
+private final class UsageChartView: NSView {
+    var records: [UsageHistoryRecord] = [] {
+        didSet { needsDisplay = true }
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 0.98).setFill()
+        bounds.fill()
+
+        drawText("Codex·用量趋势", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 14, weight: .bold), color: .white)
+        drawText("最近 \(records.count) 条记录", at: NSPoint(x: 18, y: 38), font: .systemFont(ofSize: 10), color: NSColor(white: 0.55, alpha: 1))
+
+        guard !records.isEmpty else {
+            drawText("暂无历史数据", at: NSPoint(x: bounds.midX - 40, y: bounds.midY - 8), font: .systemFont(ofSize: 14, weight: .medium), color: NSColor(white: 0.65, alpha: 1))
+            return
+        }
+
+        let plot = NSRect(
+            x: 52,
+            y: 58,
+            width: max(1, bounds.width - 72),
+            height: max(1, bounds.height - 108)
+        )
+        drawGrid(in: plot)
+        drawSeries(records.map { $0.snapshot.primaryUsedPercent }, in: plot, color: accentColor)
+        drawSeries(records.map { $0.snapshot.secondaryUsedPercent }, in: plot, color: secondaryColor)
+        drawText("主周期", at: NSPoint(x: plot.minX, y: 40), font: .systemFont(ofSize: 10, weight: .medium), color: accentColor)
+        drawText("长周期", at: NSPoint(x: plot.minX + 52, y: 40), font: .systemFont(ofSize: 10, weight: .medium), color: secondaryColor)
+
+        let firstDate = dateLabel(records.first?.recordedAt)
+        let lastDate = dateLabel(records.last?.recordedAt)
+        drawText(firstDate, at: NSPoint(x: plot.minX, y: plot.maxY + 12), font: .systemFont(ofSize: 9), color: NSColor(white: 0.5, alpha: 1))
+        let lastWidth = (lastDate as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 9)]).width
+        drawText(lastDate, at: NSPoint(x: plot.maxX - lastWidth, y: plot.maxY + 12), font: .systemFont(ofSize: 9), color: NSColor(white: 0.5, alpha: 1))
+    }
+
+    private func drawGrid(in plot: NSRect) {
+        for value in stride(from: 0, through: 100, by: 25) {
+            let y = plot.maxY - plot.height * CGFloat(value) / 100
+            let line = NSBezierPath()
+            line.move(to: NSPoint(x: plot.minX, y: y))
+            line.line(to: NSPoint(x: plot.maxX, y: y))
+            NSColor(white: 0.25, alpha: 0.65).setStroke()
+            line.lineWidth = value == 0 ? 1 : 0.5
+            line.stroke()
+            drawText("\(value)%", at: NSPoint(x: 16, y: y - 6), font: .systemFont(ofSize: 9), color: NSColor(white: 0.48, alpha: 1))
+        }
+    }
+
+    private func drawSeries(_ values: [Int?], in plot: NSRect, color: NSColor) {
+        guard !values.isEmpty else { return }
+        var previous: NSPoint?
+        for (index, value) in values.enumerated() {
+            guard let value else {
+                previous = nil
+                continue
+            }
+            let x = values.count == 1
+                ? plot.midX
+                : plot.minX + plot.width * CGFloat(index) / CGFloat(values.count - 1)
+            let y = plot.maxY - plot.height * CGFloat(min(max(value, 0), 100)) / 100
+            let point = NSPoint(x: x, y: y)
+            if let previous {
+                let line = NSBezierPath()
+                line.move(to: previous)
+                line.line(to: point)
+                color.setStroke()
+                line.lineWidth = 2
+                line.stroke()
+            }
+            let dot = NSBezierPath(ovalIn: NSRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4))
+            color.setFill()
+            dot.fill()
+            previous = point
+        }
+    }
+
+    private func drawText(_ text: String, at point: NSPoint, font: NSFont, color: NSColor) {
+        (text as NSString).draw(at: point, withAttributes: [.font: font, .foregroundColor: color])
+    }
+
+    private func dateLabel(_ timestamp: TimeInterval?) -> String {
+        guard let timestamp else { return "—" }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MM-dd HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: timestamp))
+    }
+
+    private var accentColor: NSColor {
+        NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.26, alpha: 1)
+    }
+
+    private var secondaryColor: NSColor {
+        NSColor(calibratedRed: 0.32, green: 0.68, blue: 1, alpha: 1)
+    }
+}
+
 private final class AppDelegate: NSObject, NSApplicationDelegate {
     private let usageClient = UsageClient()
     private var panel: UsagePanel?
     private var usageView: UsageView?
+    private let historyStore = UsageHistoryStore()
+    private var chartPanel: NSPanel?
+    private var chartView: UsageChartView?
     private var isOneShot = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -460,6 +574,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.printSnapshotAndQuit(snapshot)
             } else {
                 self.usageView?.snapshot = snapshot
+                self.reloadChartIfVisible()
             }
         }
         usageClient.start()
@@ -471,7 +586,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showPanel() {
         let panel = UsagePanel(
-            contentRect: NSRect(x: 0, y: 0, width: 290, height: 176),
+            contentRect: NSRect(x: 0, y: 0, width: 340, height: 176),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
             backing: .buffered,
             defer: false
@@ -486,19 +601,30 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let content = UsageView(frame: panel.contentView?.bounds ?? .zero)
         content.autoresizingMask = [.width, .height]
-        let refresh = NSButton(title: "↻", target: self, action: #selector(forceRefresh))
-        refresh.bezelStyle = .inline
-        refresh.font = .systemFont(ofSize: 16, weight: .regular)
-        refresh.contentTintColor = NSColor(white: 0.7, alpha: 1)
-        refresh.frame = NSRect(x: 230, y: 10, width: 24, height: 24)
+        let chart = toolbarButton(
+            title: "图表",
+            action: #selector(showChart),
+            frame: NSRect(x: 205, y: 10, width: 40, height: 24),
+            color: NSColor(calibratedRed: 0.16, green: 0.32, blue: 0.48, alpha: 1)
+        )
+        chart.toolTip = "查看历史图表"
+        chart.setAccessibilityLabel("查看历史图表")
+        content.addSubview(chart)
+        let refresh = toolbarButton(
+            title: "刷新",
+            action: #selector(forceRefresh),
+            frame: NSRect(x: 248, y: 10, width: 40, height: 24),
+            color: NSColor(calibratedRed: 0.78, green: 0.34, blue: 0.12, alpha: 1)
+        )
         refresh.toolTip = "立即刷新用量"
         refresh.setAccessibilityLabel("立即刷新用量")
         content.addSubview(refresh)
-        let close = NSButton(title: "×", target: self, action: #selector(quit))
-        close.bezelStyle = .inline
-        close.font = .systemFont(ofSize: 17, weight: .regular)
-        close.contentTintColor = NSColor(white: 0.7, alpha: 1)
-        close.frame = NSRect(x: 258, y: 10, width: 24, height: 24)
+        let close = toolbarButton(
+            title: "退出",
+            action: #selector(quit),
+            frame: NSRect(x: 291, y: 10, width: 40, height: 24),
+            color: NSColor(calibratedRed: 0.72, green: 0.16, blue: 0.16, alpha: 1)
+        )
         close.toolTip = "关闭用量浮窗"
         close.setAccessibilityLabel("退出")
         content.addSubview(close)
@@ -506,11 +632,28 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if let screen = NSScreen.main ?? NSScreen.screens.first {
             let frame = screen.visibleFrame
-            panel.setFrameOrigin(NSPoint(x: frame.maxX - 420, y: frame.maxY - 196))
+            panel.setFrameOrigin(NSPoint(x: frame.maxX - 370, y: frame.maxY - 196))
         }
         panel.orderFrontRegardless()
         self.panel = panel
         usageView = content
+    }
+
+    private func toolbarButton(title: String, action: Selector, frame: NSRect, color: NSColor) -> NSButton {
+        let button = NSButton(title: title, target: self, action: action)
+        button.bezelStyle = .rounded
+        button.isBordered = true
+        button.bezelColor = color
+        button.contentTintColor = .white
+        button.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [
+                .font: NSFont.systemFont(ofSize: 11, weight: .bold),
+                .foregroundColor: NSColor.white
+            ]
+        )
+        button.frame = frame
+        return button
     }
 
     @objc private func quit() {
@@ -519,6 +662,51 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func forceRefresh() {
         usageClient.forceRefresh()
+    }
+
+    @objc private func showChart() {
+        if let chartPanel {
+            chartPanel.makeKeyAndOrderFront(nil)
+            reloadChart()
+            return
+        }
+
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 540, height: 340),
+            styleMask: [.titled, .closable, .utilityWindow],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "Codex 用量历史"
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.level = .floating
+        panel.hidesOnDeactivate = false
+
+        let chart = UsageChartView(frame: panel.contentView?.bounds ?? .zero)
+        chart.autoresizingMask = [.width, .height]
+        panel.contentView = chart
+        panel.center()
+        panel.orderFrontRegardless()
+        chartPanel = panel
+        chartView = chart
+        reloadChart()
+    }
+
+    private func reloadChartIfVisible() {
+        guard chartPanel?.isVisible == true else { return }
+        reloadChart()
+    }
+
+    private func reloadChart() {
+        guard let chartView else { return }
+        DispatchQueue.global(qos: .userInitiated).async { [historyStore] in
+            let records = historyStore.recentRecords(limit: 120)
+            DispatchQueue.main.async { [weak chartView] in
+                chartView?.records = records
+            }
+        }
     }
 
     private func printSnapshotAndQuit(_ snapshot: UsageSnapshot) {
