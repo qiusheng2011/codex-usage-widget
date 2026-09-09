@@ -2,6 +2,8 @@
 
 A lightweight macOS floating widget that sits beside Codex and shows Codex usage continuously.
 
+![Codex Usage Widget preview](assets/preview.png)
+
 - Primary Codex rate-limit percentage and reset time
 - Secondary rate-limit percentage when the account provides one
 - Latest available daily token bucket and cumulative token count
