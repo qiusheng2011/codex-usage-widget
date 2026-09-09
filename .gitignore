@@ -1,5 +1,7 @@
 # Generated application bundle
 /AppBundle/Codex Usage Widget.app/
+/AppBundle/Codex Usage Widget.dmg
+/AppBundle/.dmg-staging.*/
 
 # macOS metadata
 .DS_Store

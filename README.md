@@ -31,6 +31,9 @@ To rebuild after a Codex update:
 ./build.zsh
 ```
 
+The build creates both `AppBundle/Codex Usage Widget.app` and the installation image
+`AppBundle/Codex Usage Widget.dmg`.
+
 For a headless, sanitized connectivity check:
 
 ```zsh
