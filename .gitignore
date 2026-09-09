@@ -1,0 +1,18 @@
+# Generated application bundle
+/AppBundle/Codex Usage Widget.app/
+
+# macOS metadata
+.DS_Store
+
+# Swift/Xcode build output
+.build/
+DerivedData/
+*.dSYM/
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+*.xcuserstate
+
+# Local logs and temporary files
+*.log
+*.tmp
