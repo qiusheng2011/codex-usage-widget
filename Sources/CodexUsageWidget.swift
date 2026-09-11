@@ -719,14 +719,9 @@ private final class UsageView: NSView {
             return
         }
 
-        NSGraphicsContext.saveGraphicsState()
-        let contentTransform = NSAffineTransform()
-        contentTransform.translateX(by: 0, yBy: L10n.language.isChinese ? 0 : 16)
-        contentTransform.concat()
-        defer { NSGraphicsContext.restoreGraphicsState() }
-
-        drawText(L10n.text("Codex·用量", "Codex Usage"), at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
-        drawText(snapshot.available ? "LIVE" : L10n.text("读取中", "Loading"), at: NSPoint(x: L10n.language.isChinese ? 92 : 113, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
+        let headerY: CGFloat = L10n.language.isChinese ? 16 : 32
+        drawText(L10n.text("Codex·用量", "Codex Usage"), at: NSPoint(x: 18, y: headerY), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
+        drawText(snapshot.available ? "LIVE" : L10n.text("读取中", "Loading"), at: NSPoint(x: L10n.language.isChinese ? 92 : 113, y: headerY + 2), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
 
         guard snapshot.available, let usedPercent = snapshot.primaryUsedPercent else {
             drawText(L10n.text("正在连接 Codex…", "Connecting to Codex…"), at: NSPoint(x: 18, y: 53), font: .systemFont(ofSize: 15, weight: .semibold), color: NSColor(white: 0.86, alpha: 1))
