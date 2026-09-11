@@ -9,6 +9,7 @@ ICON_RESOURCE="$APP/Contents/Resources/AppIcon.icns"
 WIDGET="$APP/Contents/PlugIns/Codex Usage Widget Desktop.appex"
 WIDGET_BINARY="$WIDGET/Contents/MacOS/CodexUsageDesktopWidget"
 WIDGET_PLIST="$ROOT/AppBundle/Widget/Info.plist"
+WIDGET_ENTITLEMENTS="$ROOT/AppBundle/Widget/Entitlements.plist"
 
 if [[ ! -f "$ICON_SOURCE" ]]; then
   print -u2 "Missing app icon source: $ICON_SOURCE"
@@ -56,7 +57,7 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"
 
-codesign --force --sign - "$WIDGET" >/dev/null
+codesign --force --sign - --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
 codesign --force --sign - "$APP" >/dev/null
 
 DMG_STAGING=$(mktemp -d "$ROOT/AppBundle/.dmg-staging.XXXXXX")

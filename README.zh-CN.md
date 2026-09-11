@@ -99,11 +99,15 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 安装或启动 App 后，可以在 macOS 桌面 Widget 图库中添加“Codex 用量”。Widget 已随 App
 一起打包为 WidgetKit 扩展。
 
+如果之前已经安装过旧版本，需要用最新构建产物替换旧的 App，再重新启动一次；WidgetKit
+会按新的版本号重新注册桌面 Widget。
+
 ## 项目结构
 
 - `Sources/CodexUsageWidget.swift`：应用主体、AppKit UI、Codex app-server 客户端、历史记录、图表、设置和菜单栏状态项。
 - `Sources/CodexUsageDesktopWidget.swift`：macOS WidgetKit 桌面 widget，显示与浮窗一致的核心用量。
 - `AppBundle/Contents/Info.plist`：应用 Bundle 元数据。
 - `AppBundle/Widget/Info.plist`：桌面 widget 扩展元数据。
+- `AppBundle/Widget/Entitlements.plist`：桌面 widget 的沙盒和本地历史只读权限。
 - `assets/icon.png`：应用图标源文件。
 - `build.zsh`：构建 `.app` 和 `.dmg` 的标准脚本。

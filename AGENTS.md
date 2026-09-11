@@ -15,6 +15,8 @@ external package dependencies.
 - `AppBundle/Contents/Info.plist`: source bundle metadata. Edit this file when bundle
   metadata must change.
 - `AppBundle/Widget/Info.plist`: source metadata for the WidgetKit extension.
+- `AppBundle/Widget/Entitlements.plist`: sandbox and read-only local-history permissions
+  for the WidgetKit extension.
 - `build.zsh`: canonical build script. It compiles the AppKit app and WidgetKit extension,
   copies their plists, creates the app bundle, and applies ad-hoc signatures.
 - `assets/preview.png`: README preview image.
@@ -75,6 +77,8 @@ was visually verified unless the built app was actually launched and inspected.
 - Keep the desktop widget read-only: it may read the latest successful snapshot from
   `~/Library/Application Support/Codex Usage Widget/usage-history.jsonl`, but must not
   access the local Codex app-server or authentication data.
+- Keep the WidgetKit extension sandboxed and restrict its temporary file exception to the
+  local usage-history directory.
 - The current minimum macOS version is 13.0. Prefer APIs available on macOS 13 and avoid
   introducing dependencies unless the task explicitly requires them.
 - Use programmatic AppKit layout consistent with the existing code. Keep controls

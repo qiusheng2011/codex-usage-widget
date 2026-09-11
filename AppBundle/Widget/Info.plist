@@ -2,20 +2,28 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+  <key>CFBundleDevelopmentRegion</key>
+  <string>en</string>
   <key>CFBundleDisplayName</key>
   <string>Codex Usage Widget</string>
   <key>CFBundleExecutable</key>
   <string>CodexUsageDesktopWidget</string>
+  <key>CFBundleInfoDictionaryVersion</key>
+  <string>6.0</string>
   <key>CFBundleIdentifier</key>
   <string>local.codex.usage-widget.desktop</string>
   <key>CFBundleName</key>
   <string>Codex Usage Widget</string>
   <key>CFBundlePackageType</key>
   <string>XPC!</string>
+  <key>CFBundleSupportedPlatforms</key>
+  <array>
+    <string>MacOSX</string>
+  </array>
   <key>CFBundleShortVersionString</key>
-  <string>1.0.0</string>
+  <string>1.1.0</string>
   <key>CFBundleVersion</key>
-  <string>1</string>
+  <string>2</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSExtension</key>
