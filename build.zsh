@@ -6,6 +6,9 @@ APP="$ROOT/AppBundle/Codex Usage Widget.app"
 DMG="$ROOT/AppBundle/Codex Usage Widget.dmg"
 ICON_SOURCE="$ROOT/assets/icon.png"
 ICON_RESOURCE="$APP/Contents/Resources/AppIcon.icns"
+WIDGET="$APP/Contents/PlugIns/Codex Usage Widget Desktop.appex"
+WIDGET_BINARY="$WIDGET/Contents/MacOS/CodexUsageDesktopWidget"
+WIDGET_PLIST="$ROOT/AppBundle/Widget/Info.plist"
 
 if [[ ! -f "$ICON_SOURCE" ]]; then
   print -u2 "Missing app icon source: $ICON_SOURCE"
@@ -14,8 +17,22 @@ fi
 
 mkdir -p "$APP/Contents/MacOS"
 mkdir -p "$APP/Contents/Resources"
+mkdir -p "$WIDGET/Contents/MacOS"
 cp "$ROOT/AppBundle/Contents/Info.plist" "$APP/Contents/Info.plist"
-xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" -framework AppKit -framework UserNotifications -o "$APP/Contents/MacOS/CodexUsageWidget"
+cp "$WIDGET_PLIST" "$WIDGET/Contents/Info.plist"
+xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" \
+  -target arm64-apple-macosx13.0 \
+  -framework AppKit \
+  -framework UserNotifications \
+  -framework WidgetKit \
+  -o "$APP/Contents/MacOS/CodexUsageWidget"
+xcrun swiftc "$ROOT/Sources/CodexUsageDesktopWidget.swift" \
+  -target arm64-apple-macosx13.0 \
+  -parse-as-library \
+  -module-name CodexUsageWidgetDesktop \
+  -framework SwiftUI \
+  -framework WidgetKit \
+  -o "$WIDGET_BINARY"
 
 ICONSET_STAGING=""
 DMG_STAGING=""
@@ -39,6 +56,7 @@ for size in 16 32 128 256 512; do
 done
 iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"
 
+codesign --force --sign - "$WIDGET" >/dev/null
 codesign --force --sign - "$APP" >/dev/null
 
 DMG_STAGING=$(mktemp -d "$ROOT/AppBundle/.dmg-staging.XXXXXX")

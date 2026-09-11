@@ -2,18 +2,21 @@
 
 ## Project scope
 
-This repository contains a lightweight macOS AppKit floating widget for Codex usage.
-The application is implemented in `Sources/CodexUsageWidget.swift` and is built without
-an Xcode project or external package dependencies.
+This repository contains a lightweight macOS AppKit floating widget and a native
+WidgetKit desktop widget for Codex usage. Both are built without an Xcode project or
+external package dependencies.
 
 ## Repository layout
 
 - `Sources/CodexUsageWidget.swift`: application, AppKit UI, local Codex app-server client,
   usage history, charts, menu-bar status item, appearance settings, and compact edge mode.
+- `Sources/CodexUsageDesktopWidget.swift`: WidgetKit extension that reads the latest local
+  usage history and renders small and medium desktop widgets.
 - `AppBundle/Contents/Info.plist`: source bundle metadata. Edit this file when bundle
   metadata must change.
-- `build.zsh`: canonical build script. It compiles the Swift source with AppKit, copies
-  the plist, creates the app bundle, and applies an ad-hoc signature.
+- `AppBundle/Widget/Info.plist`: source metadata for the WidgetKit extension.
+- `build.zsh`: canonical build script. It compiles the AppKit app and WidgetKit extension,
+  copies their plists, creates the app bundle, and applies ad-hoc signatures.
 - `assets/preview.png`: README preview image.
 - `README.md`: user-facing behavior and launch instructions.
 
@@ -33,6 +36,7 @@ Useful validation commands:
 ```zsh
 git diff --check
 plutil -lint 'AppBundle/Contents/Info.plist'
+plutil -lint 'AppBundle/Widget/Info.plist'
 ```
 
 To launch the built UI:
@@ -68,6 +72,9 @@ was visually verified unless the built app was actually launched and inspected.
 - Keep the menu-bar usage format stable as `CODEX(5h:<primary>% |1W <secondary>%)`.
   The menu-bar display preference is enabled by default unless the user has explicitly
   disabled it.
+- Keep the desktop widget read-only: it may read the latest successful snapshot from
+  `~/Library/Application Support/Codex Usage Widget/usage-history.jsonl`, but must not
+  access the local Codex app-server or authentication data.
 - The current minimum macOS version is 13.0. Prefer APIs available on macOS 13 and avoid
   introducing dependencies unless the task explicitly requires them.
 - Use programmatic AppKit layout consistent with the existing code. Keep controls

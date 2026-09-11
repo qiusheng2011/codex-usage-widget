@@ -13,6 +13,7 @@ English：[README.md](README.md)
 - 显示数据更新时间，精确到秒。
 - 正常更新间隔为 30 秒；更新失败后每 1 秒重试一次。
 - 支持手动刷新、隐藏、退出和历史图表；隐藏只收起浮窗，数据仍会继续更新，点击菜单栏用量 widget 可以重新显示。
+- 同时提供 macOS 桌面 Widget，支持小尺寸和中尺寸，显示与浮窗一致的核心用量；点击 Widget 可打开浮窗。
 - 历史图表支持 24 小时、7 天、30 天和全部数据筛选，也可以选择主周期、长周期或全部指标。
 - 显示可用的“使用限额重置”次数，点击后查看每条重置额度的标题和到期时间。
 - 支持选择自定义背景图片和调整图片透明度，原有深色主题会继续保留。
@@ -27,6 +28,8 @@ English：[README.md](README.md)
 本项目只在 macOS 本机运行。本应用自身不会发起任何外网请求，不包含遥测、数据分析、广告、跟踪或云端同步行为。
 
 应用只通过本地进程以只读方式调用本机 `codex app-server`，不会读取、复制或保存登录凭据、提示词、文件或其他用户内容。用量历史只保存在用户本机的应用支持目录中。
+
+桌面 Widget 只读取该本地历史文件中的最新用量快照，不会连接 `codex app-server`，也不会读取登录凭据或其他用户内容。
 
 独立运行的 Codex app-server 可能有其自身的联网行为；该行为不属于本应用代码，也不受本项目控制。以上声明针对 Codex Usage Widget 本身。
 
@@ -54,9 +57,10 @@ open "AppBundle/Codex Usage Widget.app"
 构建脚本会完成以下工作：
 
 1. 使用 `xcrun swiftc` 编译 Swift/AppKit 应用。
-2. 从 `assets/icon.png` 生成多分辨率 `AppIcon.icns`。
-3. 生成并签名 `.app` 应用包。
-4. 生成 `AppBundle/Codex Usage Widget.dmg` 安装镜像。
+2. 使用 SwiftUI/WidgetKit 编译 macOS 桌面 widget 扩展。
+3. 从 `assets/icon.png` 生成多分辨率 `AppIcon.icns`。
+4. 生成并签名包含 widget 扩展的 `.app` 应用包。
+5. 生成 `AppBundle/Codex Usage Widget.dmg` 安装镜像。
 
 最低支持 macOS 13.0。
 
@@ -92,9 +96,14 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 
 该模式不会启动浮窗和菜单栏状态项。
 
+安装或启动 App 后，可以在 macOS 桌面 Widget 图库中添加“Codex 用量”。Widget 已随 App
+一起打包为 WidgetKit 扩展。
+
 ## 项目结构
 
 - `Sources/CodexUsageWidget.swift`：应用主体、AppKit UI、Codex app-server 客户端、历史记录、图表、设置和菜单栏状态项。
+- `Sources/CodexUsageDesktopWidget.swift`：macOS WidgetKit 桌面 widget，显示与浮窗一致的核心用量。
 - `AppBundle/Contents/Info.plist`：应用 Bundle 元数据。
+- `AppBundle/Widget/Info.plist`：桌面 widget 扩展元数据。
 - `assets/icon.png`：应用图标源文件。
 - `build.zsh`：构建 `.app` 和 `.dmg` 的标准脚本。

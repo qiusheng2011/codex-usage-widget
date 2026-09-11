@@ -28,6 +28,17 @@
   <string>13.0</string>
   <key>LSUIElement</key>
   <true/>
+  <key>CFBundleURLTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleURLName</key>
+      <string>Codex Usage Widget</string>
+      <key>CFBundleURLSchemes</key>
+      <array>
+        <string>codexusagewidget</string>
+      </array>
+    </dict>
+  </array>
   <key>NSHighResolutionCapable</key>
   <true/>
 </dict>

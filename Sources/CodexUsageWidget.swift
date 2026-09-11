@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 import UniformTypeIdentifiers
 import UserNotifications
+import WidgetKit
 
 private struct ManualResetCredit: Codable {
     var resetType: String
@@ -519,6 +520,7 @@ private final class UsageClient {
             fetchedAt: Date().timeIntervalSince1970
         )
         historyStore.append(snapshot)
+        WidgetCenter.shared.reloadAllTimelines()
         refreshTimeoutTimer?.invalidate()
         refreshTimeoutTimer = nil
         refreshInFlight = false
@@ -1961,6 +1963,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         FileHandle.standardOutput.write(Data((text + "\n").utf8))
         NSApp.terminate(nil)
+    }
+}
+
+extension AppDelegate {
+    @MainActor
+    func application(_ application: NSApplication, open urls: [URL]) -> Bool {
+        guard urls.contains(where: { $0.scheme == "codexusagewidget" }) else { return false }
+        revealPanel()
+        return true
     }
 }
 
