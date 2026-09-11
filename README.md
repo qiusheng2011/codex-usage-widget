@@ -65,6 +65,11 @@ temporary build as a duplicate desktop-widget provider.
 
 ## Widget signing on macOS 26
 
+The build links the widget through `_NSExtensionMain`, matching Xcode's extension
+startup. Without this entry point, the extension can register successfully but exit
+before responding to gallery requests on macOS 26. Signing and registration checks
+alone do not verify gallery availability.
+
 Use an Apple signing identity when packaging an app that needs to appear in the desktop
 widget gallery. An ad-hoc signature can run locally but macOS may filter its WidgetKit
 extension from the gallery. After signing in to Xcode with an Apple Developer account,

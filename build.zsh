@@ -29,10 +29,12 @@ xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" \
   -framework UserNotifications \
   -framework WidgetKit \
   -o "$APP/Contents/MacOS/CodexUsageWidget"
+# Match Xcode's extension entry point: plain Swift main returns before serving WidgetKit requests.
 xcrun swiftc "$ROOT/Sources/CodexUsageDesktopWidget.swift" \
   -target arm64-apple-macosx13.0 \
   -parse-as-library \
   -application-extension \
+  -Xlinker -e -Xlinker _NSExtensionMain \
   -module-name CodexUsageWidgetDesktop \
   -framework SwiftUI \
   -framework WidgetKit \

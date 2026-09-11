@@ -99,6 +99,10 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 
 ## macOS 26 的 Widget 签名
 
+构建脚本使用与 Xcode 扩展一致的 `_NSExtensionMain` 启动入口。缺少此入口时，扩展虽能
+成功注册，但在 macOS 26 上会在响应图库请求前退出。因此，仅检查签名和注册成功不能
+证明 Widget 已能在图库中显示。
+
 需要出现在桌面 Widget 图库中的安装包应使用 Apple 签名身份。ad-hoc 签名可以本地运行，
 但 macOS 可能会在图库中滤掉其 WidgetKit 扩展。登录 Xcode 的 Apple Developer 账户后，使用
 可用身份构建：
