@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import SwiftUI
 import WidgetKit
 
@@ -62,10 +63,12 @@ private struct DesktopWidgetHistoryRecord: Decodable {
 
 private enum DesktopWidgetHistoryStore {
     static func latestSnapshot() -> DesktopWidgetSnapshot {
-        guard let url = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
-            .appendingPathComponent("Codex Usage Widget", isDirectory: true)
-            .appendingPathComponent("usage-history.jsonl"),
-              let data = try? Data(contentsOf: url),
+        // Foundation's applicationSupportDirectory points inside the extension sandbox.
+        // The read-only entitlement permits the host's history directory in the real home.
+        guard let home = getpwuid(getuid())?.pointee.pw_dir else { return .loading }
+        let url = URL(fileURLWithPath: String(cString: home), isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Codex Usage Widget/usage-history.jsonl")
+        guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8) else {
             return .loading
         }
@@ -102,6 +105,10 @@ private struct DesktopWidgetProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (DesktopWidgetEntry) -> Void) {
+        if context.isPreview {
+            completion(placeholder(in: context))
+            return
+        }
         completion(DesktopWidgetEntry(
             date: Date(),
             snapshot: DesktopWidgetHistoryStore.latestSnapshot()
@@ -126,6 +133,15 @@ private struct DesktopWidgetView: View {
     let entry: DesktopWidgetEntry
 
     var body: some View {
+        if #available(macOS 14.0, *) {
+            content
+                .containerBackground(for: .widget) { cardBackground }
+        } else {
+            content.background(cardBackground)
+        }
+    }
+
+    private var content: some View {
         Group {
             if family == .systemSmall {
                 smallLayout
@@ -135,7 +151,6 @@ private struct DesktopWidgetView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(16)
-        .background(cardBackground)
         .widgetURL(URL(string: "codexusagewidget://show"))
     }
 
@@ -296,6 +311,12 @@ struct CodexUsageDesktopWidget: Widget {
     private let kind = "CodexUsageDesktopWidget"
 
     var body: some WidgetConfiguration {
+        configuration
+            .contentMarginsDisabled()
+            .containerBackgroundRemovable(false)
+    }
+
+    private var configuration: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: DesktopWidgetProvider()) { entry in
             DesktopWidgetView(entry: entry)
         }

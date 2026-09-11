@@ -54,6 +54,9 @@ After installing or launching the app, add “Codex 用量” from the macOS des
 gallery. The gallery uses the host app's display name, so search for the exact name
 “Codex 用量”. The widget is packaged inside the app as a WidgetKit extension.
 
+Desktop widgets use an edge-to-edge dark background with one content inset. Gallery
+previews show sample values; placed widgets read the host app's local usage history.
+
 For a headless, sanitized connectivity check:
 
 ```zsh

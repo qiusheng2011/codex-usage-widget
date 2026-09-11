@@ -64,6 +64,9 @@ open "AppBundle/Codex Usage Widget.app"
 
 最低支持 macOS 13.0。
 
+桌面 Widget 使用铺满容器的深色背景和单层内容边距。图库使用示例数据预览，添加到桌面后
+读取主应用的本地用量历史。
+
 ## 数据和配置
 
 历史数据保存位置：
