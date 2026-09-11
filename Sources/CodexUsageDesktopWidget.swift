@@ -129,6 +129,7 @@ private struct DesktopWidgetProvider: TimelineProvider {
 
 private struct DesktopWidgetView: View {
     @Environment(\.widgetFamily) private var family
+    @Environment(\.widgetRenderingMode) private var renderingMode
 
     let entry: DesktopWidgetEntry
 
@@ -161,7 +162,7 @@ private struct DesktopWidgetView: View {
                 label("5 小时额度")
                 Text(primaryText)
                     .font(.system(size: 25, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(primaryColor)
             }
             usageBar
             HStack(spacing: 4) {
@@ -180,19 +181,19 @@ private struct DesktopWidgetView: View {
             HStack(alignment: .firstTextBaseline) {
                 Text(windowLabel)
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.68))
+                    .foregroundStyle(detailColor)
                 Spacer()
                 Text(updateLabel)
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(detailColor)
             }
             HStack(alignment: .bottom) {
                 Text(primaryText)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(primaryColor)
                 Text("已用")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(detailColor)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 3) {
                     label("长周期")
@@ -207,7 +208,7 @@ private struct DesktopWidgetView: View {
                 Spacer()
                 Text("点击打开浮窗")
                     .font(.system(size: 10))
-                    .foregroundStyle(.white.opacity(0.48))
+                    .foregroundStyle(detailColor)
             }
         }
     }
@@ -216,7 +217,7 @@ private struct DesktopWidgetView: View {
         HStack(spacing: 8) {
             Text("Codex·用量")
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(primaryColor)
             Text(entry.snapshot.available ? "LIVE" : "读取中")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundStyle(accentColor)
@@ -228,7 +229,7 @@ private struct DesktopWidgetView: View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(.white.opacity(0.2))
+                    .fill(primaryColor.opacity(0.2))
                 Capsule()
                     .fill(accentColor)
                     .frame(width: geometry.size.width * progress)
@@ -240,17 +241,20 @@ private struct DesktopWidgetView: View {
     private var resetText: some View {
         Text(resetLabel)
             .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.66))
+            .foregroundStyle(detailColor)
             .lineLimit(1)
     }
 
+    @ViewBuilder
     private var cardBackground: some View {
-        RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(Color(red: 0.08, green: 0.08, blue: 0.12).opacity(0.97))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(accentColor.opacity(0.55), lineWidth: 1)
-            )
+        if renderingMode == .fullColor {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color(red: 0.08, green: 0.08, blue: 0.12).opacity(0.97))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(accentColor.opacity(0.55), lineWidth: 1)
+                )
+        }
     }
 
     private var primaryText: String {
@@ -295,15 +299,23 @@ private struct DesktopWidgetView: View {
     private func label(_ text: String) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.white.opacity(0.68))
+            .foregroundStyle(detailColor)
+    }
+
+    private var primaryColor: Color {
+        renderingMode == .fullColor ? .white : .primary
+    }
+
+    private var detailColor: Color {
+        renderingMode == .fullColor ? .white.opacity(0.68) : .primary.opacity(0.8)
     }
 
     private var accentColor: Color {
-        Color(red: 0.97, green: 0.32, blue: 0.26)
+        renderingMode == .fullColor ? Color(red: 0.97, green: 0.32, blue: 0.26) : .primary
     }
 
     private var secondaryColor: Color {
-        Color(red: 0.32, green: 0.68, blue: 1)
+        renderingMode == .fullColor ? Color(red: 0.32, green: 0.68, blue: 1) : .primary
     }
 }
 
@@ -313,7 +325,7 @@ struct CodexUsageDesktopWidget: Widget {
     var body: some WidgetConfiguration {
         configuration
             .contentMarginsDisabled()
-            .containerBackgroundRemovable(false)
+            .containerBackgroundRemovable(true)
     }
 
     private var configuration: some WidgetConfiguration {
