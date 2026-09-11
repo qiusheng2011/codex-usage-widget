@@ -4,6 +4,48 @@ import UniformTypeIdentifiers
 import UserNotifications
 import WidgetKit
 
+private enum AppLanguage: String, Codable {
+    case chinese = "zh-Hans"
+    case english = "en"
+
+    var isChinese: Bool { self == .chinese }
+
+    static func from(rawValue: String?) -> AppLanguage {
+        guard let rawValue, let language = AppLanguage(rawValue: rawValue) else {
+            return .chinese
+        }
+        return language
+    }
+}
+
+private enum LanguagePreference {
+    static let key = "appearance.language"
+    static let defaultLanguage = AppLanguage.chinese
+
+    static var current: AppLanguage {
+        AppLanguage.from(rawValue: UserDefaults.standard.string(forKey: key))
+    }
+
+    static func set(_ language: AppLanguage) {
+        UserDefaults.standard.set(language.rawValue, forKey: key)
+    }
+}
+
+private enum L10n {
+    static var language: AppLanguage { LanguagePreference.current }
+
+    static func text(_ chinese: String, _ english: String) -> String {
+        language.isChinese ? chinese : english
+    }
+
+    static func dateFormatter(format: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: language.isChinese ? "zh_CN" : "en_US_POSIX")
+        formatter.dateFormat = format
+        return formatter
+    }
+}
+
 private struct ManualResetCredit: Codable {
     var resetType: String
     var status: String
@@ -18,6 +60,7 @@ private enum AppearancePreference {
     static let autoCollapseEnabled = "appearance.autoCollapseEnabled"
     static let compactCollapseDelay = "appearance.compactCollapseDelay"
     static let menuBarStatusVisible = "appearance.menuBarStatusVisible"
+    static let language = LanguagePreference.key
     static let defaultBackgroundImageOpacity = 0.28
     static let defaultAutoCollapseEnabled = true
     static let defaultCompactCollapseDelay = 2.0
@@ -34,6 +77,7 @@ private enum LegacyPreferenceMigration {
         AppearancePreference.autoCollapseEnabled,
         AppearancePreference.compactCollapseDelay,
         AppearancePreference.menuBarStatusVisible,
+        AppearancePreference.language,
     ]
 
     static func applyIfNeeded() {
@@ -160,6 +204,7 @@ private struct UsageSnapshot: Codable {
 private struct UsageHistoryRecord: Codable {
     let version: Int
     let recordedAt: TimeInterval
+    let language: String?
     let snapshot: UsageSnapshot
 }
 
@@ -173,11 +218,12 @@ private final class UsageHistoryStore {
             .appendingPathComponent("usage-history.jsonl")
     }
 
-    func append(_ snapshot: UsageSnapshot) {
+    func append(_ snapshot: UsageSnapshot, language: AppLanguage = LanguagePreference.current) {
         guard let fileURL,
               let data = try? JSONEncoder().encode(UsageHistoryRecord(
                   version: 1,
                   recordedAt: Date().timeIntervalSince1970,
+                  language: language.rawValue,
                   snapshot: snapshot
               )) else { return }
 
@@ -254,8 +300,8 @@ private final class PrimaryResetNotificationScheduler {
         guard interval > 1 else { return }
 
         let content = UNMutableNotificationContent()
-        content.title = "5 小时额度已重置"
-        content.body = "额度已更新，可以继续使用。"
+        content.title = L10n.text("5 小时额度已重置", "5-hour limit reset")
+        content.body = L10n.text("额度已更新，可以继续使用。", "Your usage is updated and ready to use.")
         content.sound = .default
 
         let trigger = UNTimeIntervalNotificationTrigger(
@@ -666,27 +712,29 @@ private final class UsageView: NSView {
         if isCompactPresentation {
             let primary = snapshot.primaryUsedPercent.map { "\($0)%" } ?? "—"
             let secondary = snapshot.secondaryUsedPercent.map { "\($0)%" } ?? "—"
-            drawCenteredText("5 小时  \(primary)", y: 12, font: .systemFont(ofSize: 11, weight: .semibold), color: .white)
-            drawCenteredText("长周期  \(secondary)", y: 35, font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.72, alpha: 1))
+            let primaryLabel = L10n.text("5 小时", "5h")
+            let secondaryLabel = L10n.text("长周期", "Long")
+            drawCenteredText("\(primaryLabel)  \(primary)", y: 12, font: .systemFont(ofSize: 11, weight: .semibold), color: .white)
+            drawCenteredText("\(secondaryLabel)  \(secondary)", y: 35, font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.72, alpha: 1))
             return
         }
 
-        drawText("Codex·用量", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
-        drawText(snapshot.available ? "LIVE" : "读取中", at: NSPoint(x: 92, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
+        drawText(L10n.text("Codex·用量", "Codex Usage"), at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
+        drawText(snapshot.available ? "LIVE" : L10n.text("读取中", "Loading"), at: NSPoint(x: L10n.language.isChinese ? 92 : 113, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
 
         guard snapshot.available, let usedPercent = snapshot.primaryUsedPercent else {
-            drawText("正在连接 Codex…", at: NSPoint(x: 18, y: 53), font: .systemFont(ofSize: 15, weight: .semibold), color: NSColor(white: 0.86, alpha: 1))
-            drawText("不会读取或保存登录凭据", at: NSPoint(x: 18, y: 86), font: .systemFont(ofSize: 11), color: NSColor(white: 0.62, alpha: 1))
-            drawText("点击并拖动可调整位置", at: NSPoint(x: 18, y: 125), font: .systemFont(ofSize: 11), color: NSColor(white: 0.5, alpha: 1))
+            drawText(L10n.text("正在连接 Codex…", "Connecting to Codex…"), at: NSPoint(x: 18, y: 53), font: .systemFont(ofSize: 15, weight: .semibold), color: NSColor(white: 0.86, alpha: 1))
+            drawText(L10n.text("不会读取或保存登录凭据", "No login credentials are read or stored"), at: NSPoint(x: 18, y: 86), font: .systemFont(ofSize: 11), color: NSColor(white: 0.62, alpha: 1))
+            drawText(L10n.text("点击并拖动可调整位置", "Click and drag to move"), at: NSPoint(x: 18, y: 125), font: .systemFont(ofSize: 11), color: NSColor(white: 0.5, alpha: 1))
             return
         }
 
         let windowLabel = limitLabel(snapshot.primaryWindowMinutes)
         drawText(windowLabel, at: NSPoint(x: 18, y: 50), font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.68, alpha: 1))
         drawRightAlignedText(updateLabel(snapshot.fetchedAt), rightX: bounds.width - 18, y: 50, font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
-        drawText("\(usedPercent)% 已用", at: NSPoint(x: 18, y: 68), font: .systemFont(ofSize: 22, weight: .bold), color: .white)
+        drawText(L10n.text("\(usedPercent)% 已用", "\(usedPercent)% used"), at: NSPoint(x: 18, y: 68), font: .systemFont(ofSize: 22, weight: .bold), color: .white)
         if let secondary = snapshot.secondaryUsedPercent {
-            drawRightAlignedText("长周期 \(secondary)%", rightX: bounds.width - 18, y: 75, font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.7, alpha: 1))
+            drawRightAlignedText("\(L10n.text("长周期", "Long")) \(secondary)%", rightX: bounds.width - 18, y: 75, font: .systemFont(ofSize: 11, weight: .medium), color: NSColor(white: 0.7, alpha: 1))
         }
 
         let trackWidth = max(1, bounds.width - 36)
@@ -701,7 +749,7 @@ private final class UsageView: NSView {
         drawText(resetLabel(snapshot.primaryResetsAt), at: NSPoint(x: 18, y: 125), font: .systemFont(ofSize: 11), color: NSColor(white: 0.66, alpha: 1))
         let latest = tokenLabel(snapshot.latestDailyTokens)
         let total = tokenLabel(snapshot.lifetimeTokens)
-        drawText("最近一天 \(latest)    累计 \(total)", at: NSPoint(x: 18, y: 146), font: .monospacedSystemFont(ofSize: 11, weight: .regular), color: NSColor(white: 0.82, alpha: 1))
+        drawText(L10n.text("最近一天 \(latest)    累计 \(total)", "Daily \(latest)    Total \(total)"), at: NSPoint(x: 18, y: 146), font: .monospacedSystemFont(ofSize: 11, weight: .regular), color: NSColor(white: 0.82, alpha: 1))
     }
 
     private func configureManualResetButton() {
@@ -712,8 +760,8 @@ private final class UsageView: NSView {
         manualResetButton.alignment = .right
         manualResetButton.target = self
         manualResetButton.action = #selector(manualResetTapped)
-        manualResetButton.toolTip = "查看每个手动重置的到期时间"
-        manualResetButton.setAccessibilityLabel("使用限额重置次数")
+        manualResetButton.toolTip = L10n.text("查看每个手动重置的到期时间", "View expiration dates for manual reset credits")
+        manualResetButton.setAccessibilityLabel(L10n.text("使用限额重置次数", "Manual reset credits"))
         manualResetButton.isHidden = true
         addSubview(manualResetButton)
         updateManualResetButton()
@@ -724,8 +772,13 @@ private final class UsageView: NSView {
             manualResetButton.isHidden = true
             return
         }
-        manualResetButton.title = "使用限额重置 \(count) 次"
+        manualResetButton.title = L10n.text("使用限额重置 \(count) 次", "Manual resets: \(count)")
         manualResetButton.isHidden = false
+    }
+
+    func updateLanguage() {
+        updateManualResetButton()
+        needsDisplay = true
     }
 
     private func drawBackgroundImage(in card: NSBezierPath) {
@@ -799,19 +852,24 @@ private final class UsageView: NSView {
     }
 
     private func limitLabel(_ minutes: Int?) -> String {
-        guard let minutes else { return "当前额度" }
-        if minutes >= 60 { return "\(minutes / 60) 小时额度" }
-        return "\(minutes) 分钟额度"
+        guard let minutes else { return L10n.text("当前额度", "Current limit") }
+        if minutes >= 60 {
+            return L10n.text("\(minutes / 60) 小时额度", "\(minutes / 60)-hour limit")
+        }
+        return L10n.text("\(minutes) 分钟额度", "\(minutes)-minute limit")
     }
 
     private func resetLabel(_ timestamp: TimeInterval?) -> String {
-        guard let timestamp else { return "重置时间未知" }
+        guard let timestamp else { return L10n.text("重置时间未知", "Reset time unknown") }
         let interval = max(0, Int(timestamp - Date().timeIntervalSince1970))
-        if interval < 60 { return "即将重置" }
-        if interval < 86_400 { return "约 \(interval / 3_600) 小时 \((interval % 3_600) / 60) 分钟后重置" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM-dd HH:mm"
-        return "重置：\(formatter.string(from: Date(timeIntervalSince1970: timestamp)))"
+        if interval < 60 { return L10n.text("即将重置", "Resetting soon") }
+        if interval < 86_400 {
+            let hours = interval / 3_600
+            let minutes = (interval % 3_600) / 60
+            return L10n.text("约 \(hours) 小时 \(minutes) 分钟后重置", "Resets in about \(hours)h \(minutes)m")
+        }
+        let date = L10n.dateFormatter(format: "MM-dd HH:mm").string(from: Date(timeIntervalSince1970: timestamp))
+        return L10n.text("重置：\(date)", "Reset: \(date)")
     }
 
     private func tokenLabel(_ count: Int?) -> String {
@@ -822,10 +880,8 @@ private final class UsageView: NSView {
     }
 
     private func updateLabel(_ timestamp: TimeInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "MM-dd HH:mm:ss"
-        return "更新：\(formatter.string(from: Date(timeIntervalSince1970: timestamp)))"
+        let date = L10n.dateFormatter(format: "MM-dd HH:mm:ss").string(from: Date(timeIntervalSince1970: timestamp))
+        return L10n.text("更新：\(date)", "Updated: \(date)")
     }
 }
 
@@ -858,33 +914,37 @@ private final class ManualResetDetailsView: NSView {
         NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.12, alpha: 0.98).setFill()
         bounds.fill()
 
-        drawText("使用限额重置", at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 15, weight: .bold), color: .white)
-        drawText("可用次数：\(count)", at: NSPoint(x: 18, y: 40), font: .systemFont(ofSize: 11), color: NSColor(white: 0.62, alpha: 1))
+        drawText(L10n.text("使用限额重置", "Manual Reset Credits"), at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 15, weight: .bold), color: .white)
+        drawText(L10n.text("可用次数：\(count)", "Available: \(count)"), at: NSPoint(x: 18, y: 40), font: .systemFont(ofSize: 11), color: NSColor(white: 0.62, alpha: 1))
 
         guard count > 0 else {
-            drawText("暂无可用的手动重置", at: NSPoint(x: 18, y: 78), font: .systemFont(ofSize: 13), color: NSColor(white: 0.65, alpha: 1))
+            drawText(L10n.text("暂无可用的手动重置", "No manual resets available"), at: NSPoint(x: 18, y: 78), font: .systemFont(ofSize: 13), color: NSColor(white: 0.65, alpha: 1))
             return
         }
         guard !credits.isEmpty else {
-            drawText("当前接口未返回逐条到期时间", at: NSPoint(x: 18, y: 78), font: .systemFont(ofSize: 13), color: NSColor(white: 0.65, alpha: 1))
+            drawText(L10n.text("当前接口未返回逐条到期时间", "The server did not return individual expiration dates"), at: NSPoint(x: 18, y: 78), font: .systemFont(ofSize: 13), color: NSColor(white: 0.65, alpha: 1))
             return
         }
 
         for (index, credit) in credits.enumerated() {
             let title = displayTitle(credit.title)
-            let expiration = credit.expiresAt.map { dateLabel($0) } ?? "不设置到期时间"
+            let expiration = credit.expiresAt.map { dateLabel($0) } ?? L10n.text("不设置到期时间", "No expiration")
             let y = 74 + CGFloat(index) * 42
             drawText("\(index + 1). \(title)", at: NSPoint(x: 18, y: y), font: .systemFont(ofSize: 12), color: NSColor(white: 0.82, alpha: 1))
-            drawText("到期：\(expiration)", at: NSPoint(x: 36, y: y + 19), font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
+            drawText(L10n.text("到期：\(expiration)", "Expires: \(expiration)"), at: NSPoint(x: 36, y: y + 19), font: .systemFont(ofSize: 10), color: NSColor(white: 0.58, alpha: 1))
         }
         if credits.count < count {
-            drawText("部分重置的详细信息暂不可用", at: NSPoint(x: 18, y: 92 + CGFloat(credits.count) * 42), font: .systemFont(ofSize: 10), color: NSColor(white: 0.5, alpha: 1))
+            drawText(L10n.text("部分重置的详细信息暂不可用", "Details for some resets are unavailable"), at: NSPoint(x: 18, y: 92 + CGFloat(credits.count) * 42), font: .systemFont(ofSize: 10), color: NSColor(white: 0.5, alpha: 1))
         }
     }
 
+    func updateLanguage() {
+        needsDisplay = true
+    }
+
     private func displayTitle(_ title: String?) -> String {
-        guard let title, !title.isEmpty else { return "使用限额重置" }
-        if title == "Full reset (Weekly + 5 hr)" {
+        guard let title, !title.isEmpty else { return L10n.text("使用限额重置", "Manual reset") }
+        if L10n.language.isChinese, title == "Full reset (Weekly + 5 hr)" {
             return "完全重置（每周 + 5 小时）"
         }
         return title
@@ -895,10 +955,7 @@ private final class ManualResetDetailsView: NSView {
     }
 
     private func dateLabel(_ timestamp: TimeInterval) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
-        return formatter.string(from: Date(timeIntervalSince1970: timestamp))
+        return L10n.dateFormatter(format: "yyyy-MM-dd HH:mm:ss").string(from: Date(timeIntervalSince1970: timestamp))
     }
 }
 
@@ -908,12 +965,12 @@ private enum ChartRange: Int {
     case month
     case all
 
-    var title: String {
+    func title(for language: AppLanguage) -> String {
         switch self {
-        case .day: return "24 小时"
-        case .week: return "7 天"
-        case .month: return "30 天"
-        case .all: return "全部"
+        case .day: return language.isChinese ? "24 小时" : "24 Hours"
+        case .week: return language.isChinese ? "7 天" : "7 Days"
+        case .month: return language.isChinese ? "30 天" : "30 Days"
+        case .all: return language.isChinese ? "全部" : "All"
         }
     }
 }
@@ -945,9 +1002,12 @@ private final class UsageChartView: NSView {
         bounds.fill()
 
         let visibleRecords = filteredRecords()
-        drawText("Codex·用量趋势", at: NSPoint(x: 18, y: 14), font: .systemFont(ofSize: 15, weight: .bold), color: .white)
+        drawText(L10n.text("Codex·用量趋势", "Codex Usage Trend"), at: NSPoint(x: 18, y: 14), font: .systemFont(ofSize: 15, weight: .bold), color: .white)
         drawText(
-            "时间：\(chartRange.title)    当前显示 \(visibleRecords.count) 条 / 历史 \(records.count) 条",
+            L10n.text(
+                "时间：\(chartRange.title(for: L10n.language))    当前显示 \(visibleRecords.count) 条 / 历史 \(records.count) 条",
+                "Range: \(chartRange.title(for: L10n.language))    Showing \(visibleRecords.count) / \(records.count) records"
+            ),
             at: NSPoint(x: 18, y: 37),
             font: .systemFont(ofSize: 10),
             color: NSColor(white: 0.58, alpha: 1)
@@ -960,7 +1020,7 @@ private final class UsageChartView: NSView {
             height: max(1, bounds.height - 160)
         )
         guard !visibleRecords.isEmpty else {
-            drawText("当前筛选范围暂无数据", at: NSPoint(x: bounds.midX - 58, y: bounds.midY), font: .systemFont(ofSize: 14, weight: .medium), color: NSColor(white: 0.65, alpha: 1))
+            drawText(L10n.text("当前筛选范围暂无数据", "No data in the selected range"), at: NSPoint(x: bounds.midX - 58, y: bounds.midY), font: .systemFont(ofSize: 14, weight: .medium), color: NSColor(white: 0.65, alpha: 1))
             return
         }
 
@@ -1021,12 +1081,16 @@ private final class UsageChartView: NSView {
     private func drawLegend(at point: NSPoint) {
         var x = point.x
         if chartSeries != .secondary {
-            drawText("主周期", at: NSPoint(x: x, y: point.y), font: .systemFont(ofSize: 10, weight: .medium), color: accentColor)
+            drawText(L10n.text("主周期", "Primary"), at: NSPoint(x: x, y: point.y), font: .systemFont(ofSize: 10, weight: .medium), color: accentColor)
             x += 54
         }
         if chartSeries != .primary {
-            drawText("长周期", at: NSPoint(x: x, y: point.y), font: .systemFont(ofSize: 10, weight: .medium), color: secondaryColor)
+            drawText(L10n.text("长周期", "Long cycle"), at: NSPoint(x: x, y: point.y), font: .systemFont(ofSize: 10, weight: .medium), color: secondaryColor)
         }
+    }
+
+    func updateLanguage() {
+        needsDisplay = true
     }
 
     private func drawSeries(_ values: [Int?], in plot: NSRect, color: NSColor) {
@@ -1063,9 +1127,7 @@ private final class UsageChartView: NSView {
 
     private func dateLabel(_ timestamp: TimeInterval?) -> String {
         guard let timestamp else { return "—" }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MM-dd HH:mm"
-        return formatter.string(from: Date(timeIntervalSince1970: timestamp))
+        return L10n.dateFormatter(format: "MM-dd HH:mm").string(from: Date(timeIntervalSince1970: timestamp))
     }
 
     private var accentColor: NSColor {
@@ -1084,7 +1146,13 @@ private final class AppearanceSettingsView: NSView {
     var onAutoCollapseChanged: ((Bool) -> Void)?
     var onCollapseDelayChanged: ((TimeInterval) -> Void)?
     var onMenuBarVisibilityChanged: ((Bool) -> Void)?
+    var onLanguageChanged: ((AppLanguage) -> Void)?
 
+    private var language = LanguagePreference.current
+    private let backgroundLabel = NSTextField(labelWithString: "")
+    private let opacityLabel = NSTextField(labelWithString: "")
+    private let collapseDelayLabel = NSTextField(labelWithString: "")
+    private let languageLabel = NSTextField(labelWithString: "")
     private let imagePathLabel = NSTextField(labelWithString: "")
     private let opacitySlider = NSSlider(value: 0.28, minValue: 0, maxValue: 1, target: nil, action: nil)
     private let opacityValueLabel = NSTextField(labelWithString: "28%")
@@ -1095,6 +1163,12 @@ private final class AppearanceSettingsView: NSView {
     private let collapseDelaySlider = NSSlider(value: 2, minValue: 1, maxValue: 10, target: nil, action: nil)
     private let collapseDelayValueLabel = NSTextField(labelWithString: "2 秒")
     private let hintLabel = NSTextField(labelWithString: "主题色保持为当前深色主题，图片只会作为半透明背景叠加。")
+    private let languageControl = NSSegmentedControl(
+        labels: ["中文", "English"],
+        trackingMode: .selectOne,
+        target: nil,
+        action: nil
+    )
 
     override var isFlipped: Bool { true }
 
@@ -1103,8 +1177,10 @@ private final class AppearanceSettingsView: NSView {
         opacity: CGFloat,
         autoCollapseEnabled: Bool,
         collapseDelay: TimeInterval,
-        menuBarVisible: Bool
+        menuBarVisible: Bool,
+        language: AppLanguage = LanguagePreference.current
     ) {
+        self.language = language
         super.init(frame: .zero)
         configure(
             imagePath: imagePath,
@@ -1135,20 +1211,25 @@ private final class AppearanceSettingsView: NSView {
     override func layout() {
         super.layout()
         let width = bounds.width
+        backgroundLabel.frame = NSRect(x: 18, y: 16, width: 150, height: 20)
         imagePathLabel.frame = NSRect(x: 18, y: 40, width: max(1, width - 36), height: 20)
         chooseButton.frame = NSRect(x: 18, y: 68, width: 88, height: 26)
         clearButton.frame = NSRect(x: 112, y: 68, width: 88, height: 26)
+        opacityLabel.frame = NSRect(x: 18, y: 112, width: 86, height: 20)
         opacitySlider.frame = NSRect(x: 112, y: 112, width: max(120, width - 174), height: 20)
         opacityValueLabel.frame = NSRect(x: width - 54, y: 112, width: 42, height: 20)
         autoCollapseButton.frame = NSRect(x: 18, y: 144, width: 220, height: 20)
         menuBarButton.frame = NSRect(x: 232, y: 144, width: max(1, width - 250), height: 20)
+        collapseDelayLabel.frame = NSRect(x: 18, y: 178, width: 86, height: 20)
         collapseDelaySlider.frame = NSRect(x: 112, y: 178, width: max(120, width - 174), height: 20)
         collapseDelayValueLabel.frame = NSRect(x: width - 54, y: 178, width: 42, height: 20)
-        hintLabel.frame = NSRect(x: 18, y: 220, width: max(1, width - 36), height: 20)
+        languageLabel.frame = NSRect(x: 18, y: 212, width: 86, height: 20)
+        languageControl.frame = NSRect(x: 112, y: 208, width: 150, height: 24)
+        hintLabel.frame = NSRect(x: 18, y: 252, width: max(1, width - 36), height: 20)
     }
 
     func updateImagePath(_ path: String?) {
-        imagePathLabel.stringValue = path ?? "未选择（当前使用纯色背景）"
+        imagePathLabel.stringValue = path ?? L10n.text("未选择（当前使用纯色背景）", "Not selected (using solid background)")
     }
 
     func updateOpacity(_ opacity: CGFloat) {
@@ -1168,11 +1249,32 @@ private final class AppearanceSettingsView: NSView {
     func updateCollapseDelay(_ delay: TimeInterval) {
         let value = min(max(delay, 1), 10).rounded()
         collapseDelaySlider.doubleValue = value
-        collapseDelayValueLabel.stringValue = "\(Int(value)) 秒"
+        collapseDelayValueLabel.stringValue = L10n.text("\(Int(value)) 秒", "\(Int(value)) sec")
     }
 
     func updateMenuBarVisible(_ visible: Bool) {
         menuBarButton.state = visible ? .on : .off
+    }
+
+    func updateLanguage(_ language: AppLanguage) {
+        self.language = language
+        backgroundLabel.stringValue = L10n.text("背景图片", "Background image")
+        chooseButton.title = L10n.text("选择图片", "Choose image")
+        clearButton.title = L10n.text("清除图片", "Clear image")
+        opacityLabel.stringValue = L10n.text("图片透明度", "Image opacity")
+        autoCollapseButton.title = L10n.text("自动缩放为极简卡片", "Auto-collapse to compact card")
+        menuBarButton.title = L10n.text("菜单栏显示 CODEX", "Show CODEX in menu bar")
+        collapseDelayLabel.stringValue = L10n.text("缩放等待", "Collapse delay")
+        languageLabel.stringValue = L10n.text("语言", "Language")
+        hintLabel.stringValue = L10n.text(
+            "主题色保持为当前深色主题，图片只会作为半透明背景叠加。",
+            "The dark theme remains; the image is added as a translucent background."
+        )
+        languageControl.selectedSegment = language.isChinese ? 0 : 1
+        languageControl.setAccessibilityLabel(L10n.text("界面语言", "Interface language"))
+        updateImagePath(UserDefaults.standard.string(forKey: AppearancePreference.backgroundImagePath))
+        updateCollapseDelay(collapseDelaySlider.doubleValue)
+        needsDisplay = true
     }
 
     @objc private func chooseImage() {
@@ -1199,6 +1301,11 @@ private final class AppearanceSettingsView: NSView {
         onMenuBarVisibilityChanged?(menuBarButton.state == .on)
     }
 
+    @objc private func languageChanged() {
+        let language = languageControl.selectedSegment == 1 ? AppLanguage.english : .chinese
+        onLanguageChanged?(language)
+    }
+
     private func configure(
         imagePath: String?,
         opacity: CGFloat,
@@ -1207,7 +1314,11 @@ private final class AppearanceSettingsView: NSView {
         menuBarVisible: Bool
     ) {
         wantsLayer = true
-        addSubview(label("背景图片", frame: NSRect(x: 18, y: 16, width: 100, height: 20), size: 12, weight: .semibold, color: .white))
+        configureLabel(backgroundLabel, size: 12, weight: .semibold, color: .white)
+        configureLabel(opacityLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
+        configureLabel(collapseDelayLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
+        configureLabel(languageLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
+        addSubview(backgroundLabel)
         imagePathLabel.font = .systemFont(ofSize: 11)
         imagePathLabel.textColor = NSColor(white: 0.6, alpha: 1)
         imagePathLabel.lineBreakMode = .byTruncatingMiddle
@@ -1222,7 +1333,7 @@ private final class AppearanceSettingsView: NSView {
         addSubview(chooseButton)
         addSubview(clearButton)
 
-        addSubview(label("图片透明度", frame: NSRect(x: 18, y: 112, width: 86, height: 20), size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1)))
+        addSubview(opacityLabel)
         opacitySlider.controlSize = .small
         opacitySlider.isContinuous = true
         opacitySlider.target = self
@@ -1245,7 +1356,7 @@ private final class AppearanceSettingsView: NSView {
         menuBarButton.action = #selector(menuBarVisibilityChanged)
         addSubview(menuBarButton)
 
-        addSubview(label("缩放等待", frame: NSRect(x: 18, y: 178, width: 86, height: 20), size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1)))
+        addSubview(collapseDelayLabel)
         collapseDelaySlider.controlSize = .small
         collapseDelaySlider.numberOfTickMarks = 10
         collapseDelaySlider.allowsTickMarkValuesOnly = true
@@ -1257,6 +1368,14 @@ private final class AppearanceSettingsView: NSView {
         collapseDelayValueLabel.font = .monospacedSystemFont(ofSize: 11, weight: .medium)
         addSubview(collapseDelayValueLabel)
 
+        addSubview(languageLabel)
+        languageControl.controlSize = .small
+        languageControl.segmentStyle = .rounded
+        languageControl.target = self
+        languageControl.action = #selector(languageChanged)
+        languageControl.setAccessibilityLabel(L10n.text("界面语言", "Interface language"))
+        addSubview(languageControl)
+
         hintLabel.font = .systemFont(ofSize: 10)
         hintLabel.textColor = NSColor(white: 0.5, alpha: 1)
         hintLabel.lineBreakMode = .byTruncatingTail
@@ -1266,6 +1385,7 @@ private final class AppearanceSettingsView: NSView {
         updateAutoCollapse(autoCollapseEnabled)
         updateCollapseDelay(collapseDelay)
         updateMenuBarVisible(menuBarVisible)
+        updateLanguage(language)
     }
 
     private func configureButton(_ button: NSButton) {
@@ -1273,6 +1393,11 @@ private final class AppearanceSettingsView: NSView {
         button.controlSize = .small
         button.contentTintColor = accentColor
         button.font = .systemFont(ofSize: 11, weight: .medium)
+    }
+
+    private func configureLabel(_ label: NSTextField, size: CGFloat, weight: NSFont.Weight, color: NSColor) {
+        label.font = .systemFont(ofSize: size, weight: weight)
+        label.textColor = color
     }
 
     private func label(_ text: String, frame: NSRect, size: CGFloat, weight: NSFont.Weight, color: NSColor) -> NSTextField {
@@ -1311,6 +1436,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var manualResetDetailsView: ManualResetDetailsView?
     private var appearanceSettingsPanel: NSPanel?
     private var appearanceSettingsView: AppearanceSettingsView?
+    private var panelToolbarButtons: [NSButton] = []
+    private var chartRangeLabel: NSTextField?
+    private var chartSeriesLabel: NSTextField?
+    private var chartRangeControl: NSSegmentedControl?
+    private var chartSeriesControl: NSSegmentedControl?
     private var latestSnapshot = UsageSnapshot.loading
     private var panelEdge: PanelEdge?
     private var pointerInsidePanel = false
@@ -1380,49 +1510,49 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let buttonRed = NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
         let settings = toolbarButton(
-            title: "设置",
+            title: L10n.text("设置", "Settings"),
             action: #selector(showAppearanceSettings),
             frame: NSRect(x: 138, y: 11, width: 36, height: 22),
             color: buttonRed
         )
-        settings.toolTip = "设置背景图片、透明度和极简自动缩放"
-        settings.setAccessibilityLabel("外观设置")
+        settings.toolTip = L10n.text("设置背景图片、透明度和极简自动缩放", "Set the background image, opacity, and compact mode")
+        settings.setAccessibilityLabel(L10n.text("外观设置", "Appearance settings"))
         content.addSubview(settings)
         let chart = toolbarButton(
-            title: "图表",
+            title: L10n.text("图表", "Chart"),
             action: #selector(showChart),
             frame: NSRect(x: 174, y: 11, width: 34, height: 22),
             color: buttonRed
         )
-        chart.toolTip = "查看历史图表"
-        chart.setAccessibilityLabel("查看历史图表")
+        chart.toolTip = L10n.text("查看历史图表", "View usage history chart")
+        chart.setAccessibilityLabel(L10n.text("查看历史图表", "View usage history chart"))
         content.addSubview(chart)
         let refresh = toolbarButton(
-            title: "刷新",
+            title: L10n.text("刷新", "Refresh"),
             action: #selector(forceRefresh),
             frame: NSRect(x: 208, y: 11, width: 34, height: 22),
             color: buttonRed
         )
-        refresh.toolTip = "立即刷新用量"
-        refresh.setAccessibilityLabel("立即刷新用量")
+        refresh.toolTip = L10n.text("立即刷新用量", "Refresh usage now")
+        refresh.setAccessibilityLabel(L10n.text("立即刷新用量", "Refresh usage now"))
         content.addSubview(refresh)
         let hide = toolbarButton(
-            title: "隐藏",
+            title: L10n.text("隐藏", "Hide"),
             action: #selector(hidePanel),
             frame: NSRect(x: 242, y: 11, width: 36, height: 22),
             color: buttonRed
         )
-        hide.toolTip = "隐藏用量浮窗，数据会继续更新"
-        hide.setAccessibilityLabel("隐藏用量浮窗")
+        hide.toolTip = L10n.text("隐藏用量浮窗，数据会继续更新", "Hide the widget; usage will keep updating")
+        hide.setAccessibilityLabel(L10n.text("隐藏用量浮窗", "Hide usage widget"))
         content.addSubview(hide)
         let close = toolbarButton(
-            title: "退出",
+            title: L10n.text("退出", "Quit"),
             action: #selector(quit),
             frame: NSRect(x: 278, y: 11, width: 35, height: 22),
             color: buttonRed
         )
-        close.toolTip = "关闭用量浮窗"
-        close.setAccessibilityLabel("退出")
+        close.toolTip = L10n.text("关闭用量浮窗", "Quit Codex Usage Widget")
+        close.setAccessibilityLabel(L10n.text("退出", "Quit"))
         content.addSubview(close)
         panel.contentView = content
 
@@ -1433,6 +1563,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderFrontRegardless()
         self.panel = panel
         usageView = content
+        panelToolbarButtons = [settings, chart, refresh, hide, close]
+        updatePanelLanguage()
     }
 
     private func revealPanel() {
@@ -1447,6 +1579,61 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             setPanelCompact(false)
         }
         panel.orderFrontRegardless()
+    }
+
+    private func updatePanelLanguage() {
+        usageView?.updateLanguage()
+        menuBarStatusItem?.button?.toolTip = L10n.text("打开 Codex 用量浮窗", "Open Codex Usage Widget")
+        let language = LanguagePreference.current
+        let titles = language.isChinese
+            ? ["设置", "图表", "刷新", "隐藏", "退出"]
+            : ["Settings", "Chart", "Refresh", "Hide", "Quit"]
+        let tooltips = language.isChinese
+            ? [
+                "设置背景图片、透明度和极简自动缩放",
+                "查看历史图表",
+                "立即刷新用量",
+                "隐藏用量浮窗，数据会继续更新",
+                "关闭用量浮窗"
+            ]
+            : [
+                "Set the background image, opacity, and compact mode",
+                "View usage history chart",
+                "Refresh usage now",
+                "Hide the widget; usage will keep updating",
+                "Quit Codex Usage Widget"
+            ]
+        let accessibilityLabels = language.isChinese
+            ? ["外观设置", "查看历史图表", "立即刷新用量", "隐藏用量浮窗", "退出"]
+            : ["Appearance settings", "View usage history chart", "Refresh usage now", "Hide usage widget", "Quit"]
+        let frames = language.isChinese
+            ? [
+                NSRect(x: 138, y: 11, width: 36, height: 22),
+                NSRect(x: 174, y: 11, width: 34, height: 22),
+                NSRect(x: 208, y: 11, width: 34, height: 22),
+                NSRect(x: 242, y: 11, width: 36, height: 22),
+                NSRect(x: 278, y: 11, width: 35, height: 22)
+            ]
+            : [
+                NSRect(x: 112, y: 11, width: 52, height: 22),
+                NSRect(x: 164, y: 11, width: 42, height: 22),
+                NSRect(x: 206, y: 11, width: 52, height: 22),
+                NSRect(x: 258, y: 11, width: 38, height: 22),
+                NSRect(x: 296, y: 11, width: 24, height: 22)
+            ]
+        for (index, button) in panelToolbarButtons.enumerated() {
+            guard index < titles.count else { continue }
+            button.frame = frames[index]
+            button.toolTip = tooltips[index]
+            button.setAccessibilityLabel(accessibilityLabels[index])
+            button.attributedTitle = NSAttributedString(
+                string: titles[index],
+                attributes: [
+                    .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold),
+                    .foregroundColor: NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
+                ]
+            )
+        }
     }
 
     private func panelPointerEntered() {
@@ -1573,17 +1760,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             appearanceSettingsView?.updateAutoCollapse(autoCollapseEnabled)
             appearanceSettingsView?.updateCollapseDelay(compactCollapseDelay)
             appearanceSettingsView?.updateMenuBarVisible(menuBarStatusVisible)
+            appearanceSettingsView?.updateLanguage(LanguagePreference.current)
             appearanceSettingsPanel.makeKeyAndOrderFront(nil)
             return
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 262),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 294),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
         )
-        panel.title = "外观设置"
+        panel.title = L10n.text("外观设置", "Appearance Settings")
         panel.appearance = NSAppearance(named: .darkAqua)
         panel.isOpaque = false
         panel.backgroundColor = .clear
@@ -1596,7 +1784,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             opacity: savedBackgroundImageOpacity,
             autoCollapseEnabled: autoCollapseEnabled,
             collapseDelay: compactCollapseDelay,
-            menuBarVisible: menuBarStatusVisible
+            menuBarVisible: menuBarStatusVisible,
+            language: LanguagePreference.current
         )
         settings.autoresizingMask = [.width, .height]
         settings.onChooseImage = { [weak self] in
@@ -1617,6 +1806,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.onMenuBarVisibilityChanged = { [weak self] visible in
             self?.setMenuBarStatusVisible(visible)
         }
+        settings.onLanguageChanged = { [weak self] language in
+            self?.setLanguage(language)
+        }
         panel.contentView = settings
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -1635,7 +1827,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             button.contentTintColor = menuBarAccentColor
             button.imagePosition = .imageOnly
             button.imageScaling = .scaleNone
-            button.toolTip = "打开 Codex 用量浮窗"
+            button.toolTip = L10n.text("打开 Codex 用量浮窗", "Open Codex Usage Widget")
         }
         menuBarStatusItem = statusItem
         statusItem.isVisible = menuBarStatusVisible
@@ -1692,8 +1884,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func chooseBackgroundImage() {
         let chooser = NSOpenPanel()
-        chooser.title = "选择背景图片"
-        chooser.message = "图片会以当前主题色为底进行半透明叠加"
+        chooser.title = L10n.text("选择背景图片", "Choose Background Image")
+        chooser.message = L10n.text("图片会以当前主题色为底进行半透明叠加", "The image is added as a translucent layer over the current theme")
         chooser.canChooseFiles = true
         chooser.canChooseDirectories = false
         chooser.allowsMultipleSelection = false
@@ -1743,6 +1935,34 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         UserDefaults.standard.set(visible, forKey: AppearancePreference.menuBarStatusVisible)
         menuBarStatusItem?.isVisible = visible
         appearanceSettingsView?.updateMenuBarVisible(visible)
+    }
+
+    private func setLanguage(_ language: AppLanguage) {
+        guard LanguagePreference.current != language else { return }
+        LanguagePreference.set(language)
+        updatePanelLanguage()
+        appearanceSettingsPanel?.title = L10n.text("外观设置", "Appearance Settings")
+        appearanceSettingsView?.updateLanguage(language)
+        updateChartLanguage()
+        manualResetPanel?.title = L10n.text("使用限额重置", "Manual Reset Credits")
+        manualResetDetailsView?.updateLanguage()
+        resetNotificationScheduler.schedule(for: latestSnapshot)
+    }
+
+    private func updateChartLanguage() {
+        chartPanel?.title = L10n.text("Codex 用量历史", "Codex Usage History")
+        chartRangeLabel?.stringValue = L10n.text("时间范围", "Range")
+        chartSeriesLabel?.stringValue = L10n.text("指标", "Metrics")
+        chartRangeControl?.setLabel(L10n.text("24 小时", "24 Hours"), forSegment: 0)
+        chartRangeControl?.setLabel(L10n.text("7 天", "7 Days"), forSegment: 1)
+        chartRangeControl?.setLabel(L10n.text("30 天", "30 Days"), forSegment: 2)
+        chartRangeControl?.setLabel(L10n.text("全部", "All"), forSegment: 3)
+        chartRangeControl?.setAccessibilityLabel(L10n.text("历史图表时间范围", "History chart range"))
+        chartSeriesControl?.setLabel(L10n.text("主周期", "Primary"), forSegment: 0)
+        chartSeriesControl?.setLabel(L10n.text("长周期", "Long cycle"), forSegment: 1)
+        chartSeriesControl?.setLabel(L10n.text("全部", "All"), forSegment: 2)
+        chartSeriesControl?.setAccessibilityLabel(L10n.text("历史图表指标", "History chart metrics"))
+        chartView?.updateLanguage()
     }
 
     private func applySavedAppearance(to view: UsageView) {
@@ -1818,6 +2038,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func showChart() {
         if let chartPanel {
+            updateChartLanguage()
             chartPanel.makeKeyAndOrderFront(nil)
             reloadChart()
             return
@@ -1829,7 +2050,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.title = "Codex 用量历史"
+        panel.title = L10n.text("Codex 用量历史", "Codex Usage History")
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true
@@ -1838,7 +2059,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let chart = UsageChartView(frame: panel.contentView?.bounds ?? .zero)
         chart.autoresizingMask = [.width, .height]
-        let rangeLabel = chartLabel("时间范围", frame: NSRect(x: 18, y: 59, width: 52, height: 18))
+        let rangeLabel = chartLabel(L10n.text("时间范围", "Range"), frame: NSRect(x: 18, y: 59, width: 52, height: 18))
         chart.addSubview(rangeLabel)
         let rangeControl = NSSegmentedControl(
             labels: ["24 小时", "7 天", "30 天", "全部"],
@@ -1851,12 +2072,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         rangeControl.appearance = NSAppearance(named: .darkAqua)
         rangeControl.selectedSegment = ChartRange.week.rawValue
         rangeControl.frame = NSRect(x: 74, y: 56, width: 250, height: 24)
-        rangeControl.setAccessibilityLabel("历史图表时间范围")
+        rangeControl.setAccessibilityLabel(L10n.text("历史图表时间范围", "History chart range"))
         rangeControl.target = self
         rangeControl.action = #selector(chartRangeChanged(_:))
         chart.addSubview(rangeControl)
 
-        let seriesLabel = chartLabel("指标", frame: NSRect(x: 348, y: 59, width: 34, height: 18))
+        let seriesLabel = chartLabel(L10n.text("指标", "Metrics"), frame: NSRect(x: 348, y: 59, width: 34, height: 18))
         chart.addSubview(seriesLabel)
         let seriesControl = NSSegmentedControl(
             labels: ["主周期", "长周期", "全部"],
@@ -1869,7 +2090,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         seriesControl.appearance = NSAppearance(named: .darkAqua)
         seriesControl.selectedSegment = ChartSeries.both.rawValue
         seriesControl.frame = NSRect(x: 390, y: 56, width: 220, height: 24)
-        seriesControl.setAccessibilityLabel("历史图表指标")
+        seriesControl.setAccessibilityLabel(L10n.text("历史图表指标", "History chart metrics"))
         seriesControl.target = self
         seriesControl.action = #selector(chartSeriesChanged(_:))
         chart.addSubview(seriesControl)
@@ -1878,6 +2099,11 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderFrontRegardless()
         chartPanel = panel
         chartView = chart
+        chartRangeLabel = rangeLabel
+        chartSeriesLabel = seriesLabel
+        chartRangeControl = rangeControl
+        chartSeriesControl = seriesControl
+        updateChartLanguage()
         reloadChart()
     }
 
@@ -1892,6 +2118,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showManualResetDetails() {
         let snapshot = latestSnapshot
         if let manualResetPanel {
+            manualResetPanel.title = L10n.text("使用限额重置", "Manual Reset Credits")
             manualResetDetailsView?.update(
                 count: snapshot.manualResetCount ?? 0,
                 credits: snapshot.manualResetCredits
@@ -1908,7 +2135,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false
         )
-        panel.title = "使用限额重置"
+        panel.title = L10n.text("使用限额重置", "Manual Reset Credits")
         panel.isOpaque = false
         panel.backgroundColor = .clear
         panel.hasShadow = true

@@ -3,6 +3,22 @@ import Darwin
 import SwiftUI
 import WidgetKit
 
+private enum DesktopWidgetLanguage: String {
+    case chinese = "zh-Hans"
+    case english = "en"
+
+    static func from(rawValue: String?) -> DesktopWidgetLanguage {
+        guard let rawValue, let language = DesktopWidgetLanguage(rawValue: rawValue) else {
+            return .chinese
+        }
+        return language
+    }
+
+    func text(_ chinese: String, _ english: String) -> String {
+        self == .chinese ? chinese : english
+    }
+}
+
 private struct DesktopWidgetSnapshot: Decodable {
     let available: Bool
     let primaryUsedPercent: Int?
@@ -58,19 +74,27 @@ private struct DesktopWidgetSnapshot: Decodable {
 
 private struct DesktopWidgetHistoryRecord: Decodable {
     let recordedAt: TimeInterval
+    let language: String?
     let snapshot: DesktopWidgetSnapshot
 }
 
+private struct DesktopWidgetHistoryValue {
+    let snapshot: DesktopWidgetSnapshot
+    let language: DesktopWidgetLanguage
+}
+
 private enum DesktopWidgetHistoryStore {
-    static func latestSnapshot() -> DesktopWidgetSnapshot {
+    static func latestValue() -> DesktopWidgetHistoryValue {
         // Foundation's applicationSupportDirectory points inside the extension sandbox.
         // The read-only entitlement permits the host's history directory in the real home.
-        guard let home = getpwuid(getuid())?.pointee.pw_dir else { return .loading }
+        guard let home = getpwuid(getuid())?.pointee.pw_dir else {
+            return DesktopWidgetHistoryValue(snapshot: .loading, language: .chinese)
+        }
         let url = URL(fileURLWithPath: String(cString: home), isDirectory: true)
             .appendingPathComponent("Library/Application Support/Codex Usage Widget/usage-history.jsonl")
         guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8) else {
-            return .loading
+            return DesktopWidgetHistoryValue(snapshot: .loading, language: .chinese)
         }
 
         let decoder = JSONDecoder()
@@ -80,13 +104,20 @@ private enum DesktopWidgetHistoryStore {
                 try? decoder.decode(DesktopWidgetHistoryRecord.self, from: Data(line.utf8))
             }
             .first?
-            .snapshot ?? .loading
+            .map {
+                DesktopWidgetHistoryValue(
+                    snapshot: $0.snapshot,
+                    language: DesktopWidgetLanguage.from(rawValue: $0.language)
+                )
+            }
+            ?? DesktopWidgetHistoryValue(snapshot: .loading, language: .chinese)
     }
 }
 
 private struct DesktopWidgetEntry: TimelineEntry {
     let date: Date
     let snapshot: DesktopWidgetSnapshot
+    let language: DesktopWidgetLanguage
 }
 
 private struct DesktopWidgetProvider: TimelineProvider {
@@ -100,7 +131,8 @@ private struct DesktopWidgetProvider: TimelineProvider {
                 primaryResetsAt: Date().addingTimeInterval(7_200).timeIntervalSince1970,
                 secondaryUsedPercent: 18,
                 fetchedAt: Date().timeIntervalSince1970
-            )
+            ),
+            language: .chinese
         )
     }
 
@@ -109,18 +141,14 @@ private struct DesktopWidgetProvider: TimelineProvider {
             completion(placeholder(in: context))
             return
         }
-        completion(DesktopWidgetEntry(
-            date: Date(),
-            snapshot: DesktopWidgetHistoryStore.latestSnapshot()
-        ))
+        let value = DesktopWidgetHistoryStore.latestValue()
+        completion(DesktopWidgetEntry(date: Date(), snapshot: value.snapshot, language: value.language))
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<DesktopWidgetEntry>) -> Void) {
         let now = Date()
-        let entry = DesktopWidgetEntry(
-            date: now,
-            snapshot: DesktopWidgetHistoryStore.latestSnapshot()
-        )
+        let value = DesktopWidgetHistoryStore.latestValue()
+        let entry = DesktopWidgetEntry(date: now, snapshot: value.snapshot, language: value.language)
         let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: now)
             ?? now.addingTimeInterval(900)
         completion(Timeline(entries: [entry], policy: .after(nextUpdate)))
@@ -159,14 +187,14 @@ private struct DesktopWidgetView: View {
         VStack(alignment: .leading, spacing: 6) {
             header
             VStack(alignment: .leading, spacing: 3) {
-                label("5 小时额度")
+                label(entry.language.text("5 小时额度", "5-hour limit"))
                 Text(primaryText)
                     .font(.system(size: 25, weight: .bold, design: .rounded))
                     .foregroundStyle(primaryColor)
             }
             usageBar
             HStack(spacing: 4) {
-                label("长周期")
+                label(entry.language.text("长周期", "Long cycle"))
                 Text(secondaryText)
                     .font(.system(size: 12, weight: .semibold, design: .monospaced))
                     .foregroundStyle(secondaryColor)
@@ -191,12 +219,12 @@ private struct DesktopWidgetView: View {
                 Text(primaryText)
                     .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(primaryColor)
-                Text("已用")
+                Text(entry.language.text("已用", "used"))
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(detailColor)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 3) {
-                    label("长周期")
+                    label(entry.language.text("长周期", "Long cycle"))
                     Text(secondaryText)
                         .font(.system(size: 14, weight: .semibold, design: .monospaced))
                         .foregroundStyle(secondaryColor)
@@ -206,7 +234,7 @@ private struct DesktopWidgetView: View {
             HStack {
                 resetText
                 Spacer()
-                Text("点击打开浮窗")
+                Text(entry.language.text("点击打开浮窗", "Click to open"))
                     .font(.system(size: 10))
                     .foregroundStyle(detailColor)
             }
@@ -215,10 +243,10 @@ private struct DesktopWidgetView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
-            Text("Codex·用量")
+            Text(entry.language.text("Codex·用量", "Codex Usage"))
                 .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(primaryColor)
-            Text(entry.snapshot.available ? "LIVE" : "读取中")
+            Text(entry.snapshot.available ? "LIVE" : entry.language.text("读取中", "Loading"))
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundStyle(accentColor)
             Spacer()
@@ -273,25 +301,30 @@ private struct DesktopWidgetView: View {
     }
 
     private var windowLabel: String {
-        guard let minutes = entry.snapshot.primaryWindowMinutes else { return "5 小时额度" }
-        if minutes % 60 == 0 {
-            return "\(minutes / 60) 小时额度"
+        guard let minutes = entry.snapshot.primaryWindowMinutes else {
+            return entry.language.text("5 小时额度", "5-hour limit")
         }
-        return "\(minutes) 分钟额度"
+        if minutes % 60 == 0 {
+            return entry.language.text("\(minutes / 60) 小时额度", "\(minutes / 60)-hour limit")
+        }
+        return entry.language.text("\(minutes) 分钟额度", "\(minutes)-minute limit")
     }
 
     private var resetLabel: String {
-        guard let resetAt = entry.snapshot.primaryResetsAt else { return "重置时间 —" }
+        guard let resetAt = entry.snapshot.primaryResetsAt else {
+            return entry.language.text("重置时间 —", "Reset time —")
+        }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: entry.language == .chinese ? "zh_CN" : "en_US_POSIX")
         formatter.dateFormat = "MM-dd HH:mm"
-        return "重置 \(formatter.string(from: Date(timeIntervalSince1970: resetAt)))"
+        let date = formatter.string(from: Date(timeIntervalSince1970: resetAt))
+        return entry.language.text("重置 \(date)", "Reset \(date)")
     }
 
     private var updateLabel: String {
         guard entry.snapshot.fetchedAt > 0 else { return "—" }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: entry.language == .chinese ? "zh_CN" : "en_US_POSIX")
         formatter.dateFormat = "HH:mm:ss"
         return formatter.string(from: Date(timeIntervalSince1970: entry.snapshot.fetchedAt))
     }
@@ -332,8 +365,8 @@ struct CodexUsageDesktopWidget: Widget {
         StaticConfiguration(kind: kind, provider: DesktopWidgetProvider()) { entry in
             DesktopWidgetView(entry: entry)
         }
-        .configurationDisplayName("Codex 用量")
-        .description("在 macOS 桌面显示 5 小时和长周期用量。")
+        .configurationDisplayName("Codex 用量 / Codex Usage")
+        .description("在 macOS 桌面显示 5 小时和长周期用量。 Shows five-hour and long-cycle usage on the macOS desktop.")
         .supportedFamilies([.systemSmall, .systemMedium])
     }
 }
