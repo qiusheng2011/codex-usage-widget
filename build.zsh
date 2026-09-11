@@ -25,6 +25,7 @@ cp "$ROOT/AppBundle/Contents/Info.plist" "$APP/Contents/Info.plist"
 cp "$WIDGET_PLIST" "$WIDGET/Contents/Info.plist"
 xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" \
   -target arm64-apple-macosx13.0 \
+  -parse-as-library \
   -framework AppKit \
   -framework UserNotifications \
   -framework WidgetKit \

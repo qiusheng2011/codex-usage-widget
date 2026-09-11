@@ -50,6 +50,11 @@ To rebuild after a Codex update:
 The build creates both `AppBundle/Codex Usage Widget.app` and the installation image
 `AppBundle/Codex Usage Widget.dmg`.
 
+For Xcode development, open `CodexUsageWidget.xcodeproj`. Its `Codex Usage Widget`
+scheme builds the AppKit host and embeds the `Codex Usage Widget Desktop` extension.
+The project uses ad-hoc signing by default and shares the same source plists and
+entitlements as `build.zsh`.
+
 After installing or launching the app, add “Codex 用量” from the macOS desktop widget
 gallery. The gallery uses the host app's display name, so search for the exact name
 “Codex 用量”. The widget is packaged inside the app as a WidgetKit extension.

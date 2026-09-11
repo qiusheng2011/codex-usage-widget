@@ -40,6 +40,10 @@ English：[README.md](README.md)
 - `AppBundle/Codex Usage Widget.app`：应用本体。
 - `AppBundle/Codex Usage Widget.dmg`：安装镜像。
 
+使用 Xcode 开发时，直接打开 `CodexUsageWidget.xcodeproj`。其中的
+`Codex Usage Widget` scheme 会构建 AppKit 宿主并嵌入 `Codex Usage Widget Desktop`
+扩展。工程默认使用 ad-hoc 签名，并与 `build.zsh` 共用现有 Info.plist 和 entitlements。
+
 可以双击 DMG，将 App 拖入应用程序目录，也可以直接打开 App：
 
 ```zsh

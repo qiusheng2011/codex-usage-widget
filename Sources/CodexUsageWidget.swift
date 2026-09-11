@@ -2009,12 +2009,17 @@ extension AppDelegate {
     }
 }
 
-if CommandLine.arguments.contains("--once") {
-    let oneShotRunner = OneShotUsageRunner()
-    oneShotRunner.run()
-} else {
-    let app = NSApplication.shared
-    let delegate = AppDelegate()
-    app.delegate = delegate
-    app.run()
+@main
+private enum CodexUsageWidgetMain {
+    static func main() {
+        if CommandLine.arguments.contains("--once") {
+            let oneShotRunner = OneShotUsageRunner()
+            oneShotRunner.run()
+        } else {
+            let app = NSApplication.shared
+            let delegate = AppDelegate()
+            app.delegate = delegate
+            app.run()
+        }
+    }
 }

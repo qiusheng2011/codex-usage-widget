@@ -1,0 +1,67 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 = {isa = PBXBuildFile; fileRef = A20000000000000000000001; };
+		A10000000000000000000002 = {isa = PBXBuildFile; fileRef = A20000000000000000000002; };
+		A10000000000000000000003 = {isa = PBXBuildFile; fileRef = A20000000000000000000004; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+/* Begin PBXContainerItemProxy section */
+		A30000000000000000000001 = {isa = PBXContainerItemProxy; containerPortal = A40000000000000000000001; proxyType = 1; remoteGlobalIDString = A50000000000000000000002; remoteInfo = "Codex Usage Widget Desktop"; };
+/* End PBXContainerItemProxy section */
+/* Begin PBXCopyFilesBuildPhase section */
+		A60000000000000000000003 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (A10000000000000000000003, ); name = "Embed App Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXCopyFilesBuildPhase section */
+/* Begin PBXFileReference section */
+		A20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageWidget.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CodexUsageDesktopWidget.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Codex Usage Widget.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000004 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Codex Usage Widget Desktop.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		A20000000000000000000005 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "App Info.plist"; path = Contents/Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000006 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Widget Info.plist"; path = Info.plist; sourceTree = "<group>"; };
+		A20000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Entitlements.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+/* Begin PBXFrameworksBuildPhase section */
+		A60000000000000000000001 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000005 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+/* Begin PBXGroup section */
+		A70000000000000000000001 = {isa = PBXGroup; children = (A70000000000000000000002, A70000000000000000000003, A70000000000000000000004, ); sourceTree = "<group>"; };
+		A70000000000000000000002 = {isa = PBXGroup; children = (A20000000000000000000001, A20000000000000000000002, ); path = Sources; sourceTree = "<group>"; };
+		A70000000000000000000003 = {isa = PBXGroup; children = (A20000000000000000000005, A70000000000000000000005, ); path = AppBundle; sourceTree = "<group>"; };
+		A70000000000000000000004 = {isa = PBXGroup; children = (A20000000000000000000003, A20000000000000000000004, ); name = Products; sourceTree = "<group>"; };
+		A70000000000000000000005 = {isa = PBXGroup; children = (A20000000000000000000006, A20000000000000000000007, ); path = Widget; sourceTree = "<group>"; };
+/* End PBXGroup section */
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 = {isa = PBXNativeTarget; buildConfigurationList = A80000000000000000000002; buildPhases = (A60000000000000000000002, A60000000000000000000001, A60000000000000000000003, ); buildRules = (); dependencies = (A90000000000000000000001, ); name = "Codex Usage Widget"; packageProductDependencies = (); productName = "Codex Usage Widget"; productReference = A20000000000000000000003; productType = "com.apple.product-type.application"; };
+		A50000000000000000000002 = {isa = PBXNativeTarget; buildConfigurationList = A80000000000000000000003; buildPhases = (A60000000000000000000006, A60000000000000000000005, ); buildRules = (); dependencies = (); name = "Codex Usage Widget Desktop"; packageProductDependencies = (); productName = "Codex Usage Widget Desktop"; productReference = A20000000000000000000004; productType = "com.apple.product-type.app-extension"; };
+/* End PBXNativeTarget section */
+/* Begin PBXProject section */
+		A40000000000000000000001 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 2660; LastUpgradeCheck = 2660; TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 26.6; }; A50000000000000000000002 = {CreatedOnToolsVersion = 26.6; }; }; }; buildConfigurationList = A80000000000000000000001; compatibilityVersion = "Xcode 16.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = A70000000000000000000001; minimizedProjectReferenceProxies = 1; preferredProjectObjectVersion = 77; productRefGroup = A70000000000000000000004; projectDirPath = ""; projectRoot = ""; targets = (A50000000000000000000001, A50000000000000000000002, ); };
+/* End PBXProject section */
+/* Begin PBXSourcesBuildPhase section */
+		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001, ); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000006 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000002, ); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXSourcesBuildPhase section */
+/* Begin PBXTargetDependency section */
+		A90000000000000000000001 = {isa = PBXTargetDependency; target = A50000000000000000000002; targetProxy = A30000000000000000000001; };
+/* End PBXTargetDependency section */
+/* Begin XCBuildConfiguration section */
+		B10000000000000000000001 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; }; name = Debug; };
+		B10000000000000000000002 = {isa = XCBuildConfiguration; buildSettings = {CLANG_ENABLE_MODULES = YES; MACOSX_DEPLOYMENT_TARGET = 13.0; SDKROOT = macosx; SWIFT_COMPILATION_MODE = wholemodule; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_VERSION = 5.0; }; name = Release; };
+		B10000000000000000000003 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; COMBINE_HIDPI_IMAGES = YES; EXECUTABLE_NAME = CodexUsageWidget; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = AppBundle/Contents/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks"; PRODUCT_BUNDLE_IDENTIFIER = local.codex.usagewidget; PRODUCT_NAME = "Codex Usage Widget"; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		B10000000000000000000004 = {isa = XCBuildConfiguration; buildSettings = {CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; COMBINE_HIDPI_IMAGES = YES; EXECUTABLE_NAME = CodexUsageWidget; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = AppBundle/Contents/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks"; PRODUCT_BUNDLE_IDENTIFIER = local.codex.usagewidget; PRODUCT_NAME = "Codex Usage Widget"; }; name = Release; };
+		B10000000000000000000005 = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = AppBundle/Widget/Entitlements.plist; CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; EXECUTABLE_NAME = CodexUsageDesktopWidget; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = AppBundle/Widget/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"; PRODUCT_BUNDLE_IDENTIFIER = local.codex.usagewidget.desktop; PRODUCT_NAME = "Codex Usage Widget Desktop"; SKIP_INSTALL = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; }; name = Debug; };
+		B10000000000000000000006 = {isa = XCBuildConfiguration; buildSettings = {APPLICATION_EXTENSION_API_ONLY = YES; CODE_SIGN_ENTITLEMENTS = AppBundle/Widget/Entitlements.plist; CODE_SIGN_IDENTITY = "-"; CODE_SIGN_STYLE = Manual; EXECUTABLE_NAME = CodexUsageDesktopWidget; GENERATE_INFOPLIST_FILE = NO; INFOPLIST_FILE = AppBundle/Widget/Info.plist; LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/../Frameworks @executable_path/../../../../Frameworks"; PRODUCT_BUNDLE_IDENTIFIER = local.codex.usagewidget.desktop; PRODUCT_NAME = "Codex Usage Widget Desktop"; SKIP_INSTALL = YES; }; name = Release; };
+/* End XCBuildConfiguration section */
+/* Begin XCConfigurationList section */
+		A80000000000000000000001 = {isa = XCConfigurationList; buildConfigurations = (B10000000000000000000001, B10000000000000000000002, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A80000000000000000000002 = {isa = XCConfigurationList; buildConfigurations = (B10000000000000000000003, B10000000000000000000004, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		A80000000000000000000003 = {isa = XCConfigurationList; buildConfigurations = (B10000000000000000000005, B10000000000000000000006, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+/* End XCConfigurationList section */
+	};
+	rootObject = A40000000000000000000001;
+}
