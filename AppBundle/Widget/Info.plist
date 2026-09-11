@@ -11,7 +11,7 @@
   <key>CFBundleInfoDictionaryVersion</key>
   <string>6.0</string>
   <key>CFBundleIdentifier</key>
-  <string>local.codex.usage-widget.desktop</string>
+  <string>local.codex.usagewidget.desktop</string>
   <key>CFBundleName</key>
   <string>Codex 用量</string>
   <key>CFBundlePackageType</key>
@@ -23,7 +23,7 @@
   <key>CFBundleShortVersionString</key>
   <string>1.1.2</string>
   <key>CFBundleVersion</key>
-  <string>7</string>
+  <string>8</string>
   <key>LSMinimumSystemVersion</key>
   <string>13.0</string>
   <key>NSExtension</key>

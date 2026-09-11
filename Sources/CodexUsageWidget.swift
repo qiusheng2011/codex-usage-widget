@@ -24,6 +24,34 @@ private enum AppearancePreference {
     static let defaultMenuBarStatusVisible = true
 }
 
+/// Keeps existing appearance preferences when the development bundle identifier changes.
+private enum LegacyPreferenceMigration {
+    private static let completedKey = "migration.local.codex.usage-widget.completed"
+    private static let legacyBundleIdentifier = "local.codex.usage-widget"
+    private static let keys = [
+        AppearancePreference.backgroundImagePath,
+        AppearancePreference.backgroundImageOpacity,
+        AppearancePreference.autoCollapseEnabled,
+        AppearancePreference.compactCollapseDelay,
+        AppearancePreference.menuBarStatusVisible,
+    ]
+
+    static func applyIfNeeded() {
+        let currentDefaults = UserDefaults.standard
+        guard !currentDefaults.bool(forKey: completedKey),
+              let legacyDefaults = UserDefaults(suiteName: legacyBundleIdentifier) else {
+            return
+        }
+
+        for key in keys where currentDefaults.object(forKey: key) == nil {
+            if let value = legacyDefaults.object(forKey: key) {
+                currentDefaults.set(value, forKey: key)
+            }
+        }
+        currentDefaults.set(true, forKey: completedKey)
+    }
+}
+
 private struct UsageSnapshot: Codable {
     var available: Bool
     var primaryUsedPercent: Int?
@@ -1289,6 +1317,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var compactCollapseTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        LegacyPreferenceMigration.applyIfNeeded()
         NSApp.setActivationPolicy(.accessory)
         resetNotificationScheduler.requestAuthorization()
         configureMenuBarStatusItem()

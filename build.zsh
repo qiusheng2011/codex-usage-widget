@@ -11,6 +11,7 @@ WIDGET_BINARY="$WIDGET/Contents/MacOS/CodexUsageDesktopWidget"
 WIDGET_PLIST="$ROOT/AppBundle/Widget/Info.plist"
 WIDGET_ENTITLEMENTS="$ROOT/AppBundle/Widget/Entitlements.plist"
 SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
+LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
 
 if [[ ! -f "$ICON_SOURCE" ]]; then
   print -u2 "Missing app icon source: $ICON_SOURCE"
@@ -39,13 +40,19 @@ xcrun swiftc "$ROOT/Sources/CodexUsageDesktopWidget.swift" \
 
 ICONSET_STAGING=""
 DMG_STAGING=""
+unregister_transient_app() {
+  "$LSREGISTER" -u "$1" >/dev/null 2>&1 || true
+}
+
 cleanup() {
   if [[ -n "$ICONSET_STAGING" ]]; then
     rm -rf "$ICONSET_STAGING"
   fi
   if [[ -n "$DMG_STAGING" ]]; then
+    unregister_transient_app "$DMG_STAGING/Codex Usage Widget.app"
     rm -rf "$DMG_STAGING"
   fi
+  unregister_transient_app "$APP"
 }
 trap cleanup EXIT
 
@@ -79,7 +86,7 @@ else
   codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP" >/dev/null
 fi
 
-DMG_STAGING=$(mktemp -d "$ROOT/AppBundle/.dmg-staging.XXXXXX")
+DMG_STAGING=$(mktemp -d "/private/tmp/codex-usage-widget-dmg.XXXXXX")
 cp -R "$APP" "$DMG_STAGING/"
 hdiutil create \
   -volname "Codex Usage Widget" \
