@@ -719,6 +719,12 @@ private final class UsageView: NSView {
             return
         }
 
+        NSGraphicsContext.saveGraphicsState()
+        let contentTransform = NSAffineTransform()
+        contentTransform.translateX(by: 0, yBy: L10n.language.isChinese ? 0 : 16)
+        contentTransform.concat()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+
         drawText(L10n.text("Codex·用量", "Codex Usage"), at: NSPoint(x: 18, y: 16), font: .systemFont(ofSize: 13, weight: .bold), color: .white)
         drawText(snapshot.available ? "LIVE" : L10n.text("读取中", "Loading"), at: NSPoint(x: L10n.language.isChinese ? 92 : 113, y: 18), font: .monospacedSystemFont(ofSize: 10, weight: .bold), color: accentColor)
 
@@ -1615,12 +1621,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSRect(x: 278, y: 11, width: 35, height: 22)
             ]
             : [
-                NSRect(x: 112, y: 11, width: 52, height: 22),
-                NSRect(x: 164, y: 11, width: 42, height: 22),
-                NSRect(x: 206, y: 11, width: 52, height: 22),
-                NSRect(x: 258, y: 11, width: 38, height: 22),
-                NSRect(x: 296, y: 11, width: 24, height: 22)
+                NSRect(x: 112, y: 11, width: 48, height: 22),
+                NSRect(x: 160, y: 11, width: 36, height: 22),
+                NSRect(x: 196, y: 11, width: 48, height: 22),
+                NSRect(x: 244, y: 11, width: 32, height: 22),
+                NSRect(x: 276, y: 11, width: 28, height: 22)
             ]
+        let toolbarFont = NSFont.monospacedSystemFont(ofSize: language.isChinese ? 10 : 9, weight: .bold)
         for (index, button) in panelToolbarButtons.enumerated() {
             guard index < titles.count else { continue }
             button.frame = frames[index]
@@ -1629,7 +1636,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             button.attributedTitle = NSAttributedString(
                 string: titles[index],
                 attributes: [
-                    .font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold),
+                    .font: toolbarFont,
                     .foregroundColor: NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
                 ]
             )
