@@ -35,6 +35,13 @@ prompts, files, or other user content.
 The separate Codex app-server may have its own network behavior; that independent behavior
 is outside this widget and is not controlled by this project.
 
+## Commons Clause
+
+This software is completely free for personal, educational, research, and nonprofit use.
+Any company, enterprise, commercial project, or profit-oriented organization or individual
+that wishes to use, copy, or modify this software must obtain written authorization from
+the original author and purchase a commercial license.
+
 ## Launch
 
 Open `AppBundle/Codex Usage Widget.app`, or run:
