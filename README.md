@@ -17,6 +17,7 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 - Shows available manual reset credits beside the reset time; click the count to view each available credit's expiration when the app-server provides details
 - The appearance settings support a custom background image and image opacity; the existing dark theme color remains overlaid, and automatic compact scaling can be enabled with a configurable 1–10 second delay
 - The appearance settings support switching between Chinese and English; Chinese is the default and the choice is remembered locally
+- The desktop Widget follows the selected language and refreshes when the language changes; old local history continues to default to Chinese
 - The menu bar can show live usage as `CODEX(5h:42%|1W:18%)`; its visibility is configurable and enabled by default
 - Drag the panel near a screen edge to snap and collapse it to a minimal 5-hour/long-cycle view; hover over it to restore the full panel
 - `assets/icon.png` is used as the application icon and is converted to a multi-resolution `AppIcon.icns` during the build

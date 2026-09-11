@@ -90,11 +90,15 @@ private enum DesktopWidgetHistoryStore {
         guard let home = getpwuid(getuid())?.pointee.pw_dir else {
             return DesktopWidgetHistoryValue(snapshot: .loading, language: .chinese)
         }
-        let url = URL(fileURLWithPath: String(cString: home), isDirectory: true)
-            .appendingPathComponent("Library/Application Support/Codex Usage Widget/usage-history.jsonl")
+        let directoryURL = URL(fileURLWithPath: String(cString: home), isDirectory: true)
+            .appendingPathComponent("Library/Application Support/Codex Usage Widget", isDirectory: true)
+        let url = directoryURL.appendingPathComponent("usage-history.jsonl")
+        let languageURL = directoryURL.appendingPathComponent("language")
+        let persistedLanguage = try? String(contentsOf: languageURL, encoding: .utf8)
+        let language = DesktopWidgetLanguage.from(rawValue: persistedLanguage)
         guard let data = try? Data(contentsOf: url),
               let text = String(data: data, encoding: .utf8) else {
-            return DesktopWidgetHistoryValue(snapshot: .loading, language: .chinese)
+            return DesktopWidgetHistoryValue(snapshot: .loading, language: language)
         }
 
         let decoder = JSONDecoder()
@@ -107,10 +111,12 @@ private enum DesktopWidgetHistoryStore {
             .map {
                 DesktopWidgetHistoryValue(
                     snapshot: $0.snapshot,
-                    language: DesktopWidgetLanguage.from(rawValue: $0.language)
+                    language: persistedLanguage == nil
+                        ? DesktopWidgetLanguage.from(rawValue: $0.language)
+                        : language
                 )
             }
-            ?? DesktopWidgetHistoryValue(snapshot: .loading, language: .chinese)
+            ?? DesktopWidgetHistoryValue(snapshot: .loading, language: language)
     }
 }
 

@@ -21,6 +21,7 @@ private enum AppLanguage: String, Codable {
 private enum LanguagePreference {
     static let key = "appearance.language"
     static let defaultLanguage = AppLanguage.chinese
+    private static let sharedLanguageFileName = "language"
 
     static var current: AppLanguage {
         AppLanguage.from(rawValue: UserDefaults.standard.string(forKey: key))
@@ -28,6 +29,28 @@ private enum LanguagePreference {
 
     static func set(_ language: AppLanguage) {
         UserDefaults.standard.set(language.rawValue, forKey: key)
+        persistForDesktopWidget(language)
+    }
+
+    static func synchronizeDesktopWidget() {
+        persistForDesktopWidget(current)
+    }
+
+    private static func persistForDesktopWidget(_ language: AppLanguage) {
+        guard let directoryURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("Codex Usage Widget", isDirectory: true) else {
+            return
+        }
+
+        do {
+            try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+            try Data(language.rawValue.utf8).write(
+                to: directoryURL.appendingPathComponent(sharedLanguageFileName),
+                options: .atomic
+            )
+        } catch {
+            // The app UserDefaults value remains authoritative if the Widget marker cannot be written.
+        }
     }
 }
 
@@ -1449,6 +1472,8 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         LegacyPreferenceMigration.applyIfNeeded()
+        LanguagePreference.synchronizeDesktopWidget()
+        WidgetCenter.shared.reloadAllTimelines()
         NSApp.setActivationPolicy(.accessory)
         resetNotificationScheduler.requestAuthorization()
         configureMenuBarStatusItem()
@@ -1942,6 +1967,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setLanguage(_ language: AppLanguage) {
         guard LanguagePreference.current != language else { return }
         LanguagePreference.set(language)
+        WidgetCenter.shared.reloadAllTimelines()
         updatePanelLanguage()
         appearanceSettingsPanel?.title = L10n.text("外观设置", "Appearance Settings")
         appearanceSettingsView?.updateLanguage(language)
