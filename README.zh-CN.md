@@ -4,7 +4,7 @@
 
 English：[README.md](README.md)
 
-![Codex Usage Widget 预览](assets/preview.png)
+![Codex Usage Widget 预览](assets/preview_cn.png)
 
 ## 功能
 

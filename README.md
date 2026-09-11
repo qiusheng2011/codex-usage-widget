@@ -4,7 +4,7 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 
 中文说明：[README.zh-CN.md](README.zh-CN.md)
 
-![Codex Usage Widget preview](assets/preview.png)
+![Codex Usage Widget preview](assets/preview_en.png)
 
 - Primary Codex rate-limit percentage and reset time
 - Sends a macOS local notification when the five-hour rate-limit window resets; notification permission is requested on first launch
