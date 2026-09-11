@@ -10,6 +10,7 @@ WIDGET="$APP/Contents/PlugIns/Codex Usage Widget Desktop.appex"
 WIDGET_BINARY="$WIDGET/Contents/MacOS/CodexUsageDesktopWidget"
 WIDGET_PLIST="$ROOT/AppBundle/Widget/Info.plist"
 WIDGET_ENTITLEMENTS="$ROOT/AppBundle/Widget/Entitlements.plist"
+SIGN_IDENTITY="${CODE_SIGN_IDENTITY:--}"
 
 if [[ ! -f "$ICON_SOURCE" ]]; then
   print -u2 "Missing app icon source: $ICON_SOURCE"
@@ -64,8 +65,13 @@ if ! iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"; then
   fi
 fi
 
-codesign --force --sign - --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
-codesign --force --sign - "$APP" >/dev/null
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  print -u2 "Warning: using an ad-hoc signature. macOS may omit ad-hoc WidgetKit extensions from the Widget gallery."
+  print -u2 "Set CODE_SIGN_IDENTITY to an Apple Development or Developer ID Application identity before packaging for installation."
+fi
+
+codesign --force --sign "$SIGN_IDENTITY" --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
+codesign --force --sign "$SIGN_IDENTITY" "$APP" >/dev/null
 
 DMG_STAGING=$(mktemp -d "$ROOT/AppBundle/.dmg-staging.XXXXXX")
 cp -R "$APP" "$DMG_STAGING/"

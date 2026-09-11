@@ -59,3 +59,19 @@ For a headless, sanitized connectivity check:
 ```zsh
 "AppBundle/Codex Usage Widget.app/Contents/MacOS/CodexUsageWidget" --once
 ```
+
+`--once` runs without starting the AppKit host or WidgetKit, so it doesn't register the
+temporary build as a duplicate desktop-widget provider.
+
+## Widget signing on macOS 26
+
+Use an Apple signing identity when packaging an app that needs to appear in the desktop
+widget gallery. An ad-hoc signature can run locally but macOS may filter its WidgetKit
+extension from the gallery. After signing in to Xcode with an Apple Developer account,
+pass the available identity to the build:
+
+```zsh
+CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./build.zsh
+```
+
+For direct distribution, use a `Developer ID Application` identity and notarize the app.

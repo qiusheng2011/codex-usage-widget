@@ -1284,31 +1284,23 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceSettingsPanel: NSPanel?
     private var appearanceSettingsView: AppearanceSettingsView?
     private var latestSnapshot = UsageSnapshot.loading
-    private var isOneShot = false
     private var panelEdge: PanelEdge?
     private var pointerInsidePanel = false
     private var compactCollapseTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        isOneShot = CommandLine.arguments.contains("--once")
-        if !isOneShot {
-            NSApp.setActivationPolicy(.accessory)
-            resetNotificationScheduler.requestAuthorization()
-            configureMenuBarStatusItem()
-            showPanel()
-        }
+        NSApp.setActivationPolicy(.accessory)
+        resetNotificationScheduler.requestAuthorization()
+        configureMenuBarStatusItem()
+        showPanel()
         usageClient.onUpdate = { [weak self] snapshot in
             guard let self else { return }
             self.latestSnapshot = snapshot
             self.resetNotificationScheduler.schedule(for: snapshot)
             self.updateMenuBarStatus(snapshot)
-            if self.isOneShot {
-                self.printSnapshotAndQuit(snapshot)
-            } else {
-                self.usageView?.snapshot = snapshot
-                self.reloadChartIfVisible()
-                self.updateManualResetDetailsIfVisible()
-            }
+            self.usageView?.snapshot = snapshot
+            self.reloadChartIfVisible()
+            self.updateManualResetDetailsIfVisible()
         }
         usageClient.start()
     }
@@ -1318,7 +1310,6 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        guard !isOneShot else { return false }
         revealPanel()
         return true
     }
@@ -1955,14 +1946,28 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func printSnapshotAndQuit(_ snapshot: UsageSnapshot) {
-        guard let data = try? JSONEncoder().encode(snapshot),
-              let text = String(data: data, encoding: .utf8) else {
-            NSApp.terminate(nil)
-            return
+}
+
+/// Runs the connectivity check without initializing an AppKit application bundle. This prevents
+/// LaunchServices from registering a temporary build as a competing WidgetKit host app.
+private final class OneShotUsageRunner {
+    private let usageClient = UsageClient()
+    private var hasPrintedSnapshot = false
+
+    func run() {
+        usageClient.onUpdate = { [weak self] snapshot in
+            guard let self, !self.hasPrintedSnapshot else { return }
+            self.hasPrintedSnapshot = true
+            if let data = try? JSONEncoder().encode(snapshot),
+               let text = String(data: data, encoding: .utf8) {
+                FileHandle.standardOutput.write(Data((text + "\n").utf8))
+            }
+            self.usageClient.stop()
         }
-        FileHandle.standardOutput.write(Data((text + "\n").utf8))
-        NSApp.terminate(nil)
+        usageClient.start()
+        while !hasPrintedSnapshot {
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 0.1))
+        }
     }
 }
 
@@ -1975,7 +1980,12 @@ extension AppDelegate {
     }
 }
 
-let app = NSApplication.shared
-private let delegate = AppDelegate()
-app.delegate = delegate
-app.run()
+if CommandLine.arguments.contains("--once") {
+    let oneShotRunner = OneShotUsageRunner()
+    oneShotRunner.run()
+} else {
+    let app = NSApplication.shared
+    let delegate = AppDelegate()
+    app.delegate = delegate
+    app.run()
+}

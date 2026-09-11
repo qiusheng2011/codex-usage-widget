@@ -95,6 +95,19 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 ```
 
 该模式不会启动浮窗和菜单栏状态项。
+它也不会初始化 AppKit 或 WidgetKit，因此不会把工作区构建产物登记为重复的桌面 Widget 提供方。
+
+## macOS 26 的 Widget 签名
+
+需要出现在桌面 Widget 图库中的安装包应使用 Apple 签名身份。ad-hoc 签名可以本地运行，
+但 macOS 可能会在图库中滤掉其 WidgetKit 扩展。登录 Xcode 的 Apple Developer 账户后，使用
+可用身份构建：
+
+```zsh
+CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./build.zsh
+```
+
+独立分发时应使用 `Developer ID Application` 身份，并对 App 完成公证。
 
 安装或启动 App 后，可以在 macOS 桌面 Widget 图库中添加“Codex 用量”。图库按宿主 App
 显示名搜索，请搜索完整名称“Codex 用量”。Widget 已随 App 一起打包为 WidgetKit 扩展。
