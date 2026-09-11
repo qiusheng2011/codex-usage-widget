@@ -51,7 +51,8 @@ The build creates both `AppBundle/Codex Usage Widget.app` and the installation i
 `AppBundle/Codex Usage Widget.dmg`.
 
 After installing or launching the app, add “Codex 用量” from the macOS desktop widget
-gallery. The widget is packaged inside the app as a WidgetKit extension.
+gallery. The gallery uses the host app's display name, so search for the exact name
+“Codex 用量”. The widget is packaged inside the app as a WidgetKit extension.
 
 For a headless, sanitized connectivity check:
 

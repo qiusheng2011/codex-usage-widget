@@ -55,7 +55,14 @@ for size in 16 32 128 256 512; do
   doubleSize=$((size * 2))
   sips -z "$doubleSize" "$doubleSize" "$ICON_SOURCE" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
-iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"
+if ! iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"; then
+  if [[ -f "$ICON_RESOURCE" ]]; then
+    print -u2 "Warning: iconutil could not rebuild the icon; preserving the existing AppIcon.icns."
+  else
+    print -u2 "Unable to create AppIcon.icns: iconutil failed and no existing icon is available."
+    exit 1
+  fi
+fi
 
 codesign --force --sign - --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
 codesign --force --sign - "$APP" >/dev/null

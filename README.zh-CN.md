@@ -96,8 +96,8 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 
 该模式不会启动浮窗和菜单栏状态项。
 
-安装或启动 App 后，可以在 macOS 桌面 Widget 图库中添加“Codex 用量”。Widget 已随 App
-一起打包为 WidgetKit 扩展。
+安装或启动 App 后，可以在 macOS 桌面 Widget 图库中添加“Codex 用量”。图库按宿主 App
+显示名搜索，请搜索完整名称“Codex 用量”。Widget 已随 App 一起打包为 WidgetKit 扩展。
 
 如果之前已经安装过旧版本，需要用最新构建产物替换旧的 App，再重新启动一次；WidgetKit
 会按新的版本号重新注册桌面 Widget。
