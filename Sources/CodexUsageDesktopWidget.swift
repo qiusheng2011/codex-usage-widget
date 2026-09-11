@@ -292,7 +292,6 @@ private struct DesktopWidgetView: View {
     }
 }
 
-@main
 struct CodexUsageDesktopWidget: Widget {
     private let kind = "CodexUsageDesktopWidget"
 
@@ -303,5 +302,12 @@ struct CodexUsageDesktopWidget: Widget {
         .configurationDisplayName("Codex 用量")
         .description("在 macOS 桌面显示 5 小时和长周期用量。")
         .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+@main
+struct CodexUsageDesktopWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        CodexUsageDesktopWidget()
     }
 }

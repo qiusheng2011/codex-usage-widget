@@ -31,6 +31,7 @@ xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" \
 xcrun swiftc "$ROOT/Sources/CodexUsageDesktopWidget.swift" \
   -target arm64-apple-macosx13.0 \
   -parse-as-library \
+  -application-extension \
   -module-name CodexUsageWidgetDesktop \
   -framework SwiftUI \
   -framework WidgetKit \
@@ -70,8 +71,13 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
   print -u2 "Set CODE_SIGN_IDENTITY to an Apple Development or Developer ID Application identity before packaging for installation."
 fi
 
-codesign --force --sign "$SIGN_IDENTITY" --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
-codesign --force --sign "$SIGN_IDENTITY" "$APP" >/dev/null
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  codesign --force --sign "$SIGN_IDENTITY" --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
+  codesign --force --sign "$SIGN_IDENTITY" "$APP" >/dev/null
+else
+  codesign --force --options runtime --sign "$SIGN_IDENTITY" --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
+  codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP" >/dev/null
+fi
 
 DMG_STAGING=$(mktemp -d "$ROOT/AppBundle/.dmg-staging.XXXXXX")
 cp -R "$APP" "$DMG_STAGING/"
