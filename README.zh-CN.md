@@ -101,21 +101,24 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 该模式不会启动浮窗和菜单栏状态项。
 它也不会初始化 AppKit 或 WidgetKit，因此不会把工作区构建产物登记为重复的桌面 Widget 提供方。
 
-## macOS 26 的 Widget 签名
+## macOS 26 的隐私保护签名
 
 构建脚本使用与 Xcode 扩展一致的 `_NSExtensionMain` 启动入口。缺少此入口时，扩展虽能
 成功注册，但在 macOS 26 上会在响应图库请求前退出。因此，仅检查签名和注册成功不能
 证明 Widget 已能在图库中显示。
 
-需要出现在桌面 Widget 图库中的安装包应使用 Apple 签名身份。ad-hoc 签名可以本地运行，
-但 macOS 可能会在图库中滤掉其 WidgetKit 扩展。登录 Xcode 的 Apple Developer 账户后，使用
-可用身份构建：
+默认构建使用 ad-hoc 签名，因此公开发布的 App 和 DMG 不会嵌入 Apple 开发者姓名、邮箱或
+Team ID：
 
 ```zsh
-CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./build.zsh
+./build.zsh
 ```
 
-独立分发时应使用 `Developer ID Application` 身份，并对 App 完成公证。
+构建完成后，脚本会检查宿主 App 和 WidgetKit 扩展；如果意外包含 Apple 签名机构或 Team ID，
+构建将直接失败。该检查只保护安装产物，不会删除 Git 历史中已经记录的提交者邮箱。
+
+ad-hoc 安装包无法完成 Apple 公证，用户首次启动时可能需要手动允许。桌面 Widget 是否可用
+仍需在目标 macOS 版本实测；扩展继续使用 macOS 26 所需的原生 `_NSExtensionMain` 入口。
 
 安装或启动 App 后，可以在 macOS 桌面 Widget 图库中添加“Codex 用量”。图库按宿主 App
 显示名搜索，请搜索完整名称“Codex 用量”。Widget 已随 App 一起打包为 WidgetKit 扩展。

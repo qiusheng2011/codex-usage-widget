@@ -67,20 +67,24 @@ For a headless, sanitized connectivity check:
 `--once` runs without starting the AppKit host or WidgetKit, so it doesn't register the
 temporary build as a duplicate desktop-widget provider.
 
-## Widget signing on macOS 26
+## Privacy-preserving package signing on macOS 26
 
 The build links the widget through `_NSExtensionMain`, matching Xcode's extension
 startup. Without this entry point, the extension can register successfully but exit
 before responding to gallery requests on macOS 26. Signing and registration checks
 alone do not verify gallery availability.
 
-Use an Apple signing identity when packaging an app that needs to appear in the desktop
-widget gallery. An ad-hoc signature can run locally but macOS may filter its WidgetKit
-extension from the gallery. After signing in to Xcode with an Apple Developer account,
-pass the available identity to the build:
+The default build uses an ad-hoc signature so the published app and DMG don't embed an
+Apple developer name, email address, or Team ID:
 
 ```zsh
-CODE_SIGN_IDENTITY="Apple Development: Your Name (TEAMID)" ./build.zsh
+./build.zsh
 ```
 
-For direct distribution, use a `Developer ID Application` identity and notarize the app.
+The build checks both the host app and WidgetKit extension after signing and stops if an
+Apple signing authority or Team ID is unexpectedly present. This protects the package,
+but doesn't remove author emails already stored in Git history.
+
+Ad-hoc packages aren't notarized, so users may need to explicitly approve the app on
+first launch. Desktop Widget availability must be tested on the target macOS release;
+the extension still uses the native `_NSExtensionMain` entry point required by macOS 26.

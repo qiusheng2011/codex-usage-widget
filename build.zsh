@@ -76,8 +76,7 @@ if ! iconutil -c icns "$ICONSET" -o "$ICON_RESOURCE"; then
 fi
 
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
-  print -u2 "Warning: using an ad-hoc signature. macOS may omit ad-hoc WidgetKit extensions from the Widget gallery."
-  print -u2 "Set CODE_SIGN_IDENTITY to an Apple Development or Developer ID Application identity before packaging for installation."
+  print -u2 "Using a privacy-preserving ad-hoc signature (no Apple account identity is embedded)."
 fi
 
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
@@ -86,6 +85,16 @@ if [[ "$SIGN_IDENTITY" == "-" ]]; then
 else
   codesign --force --options runtime --sign "$SIGN_IDENTITY" --entitlements "$WIDGET_ENTITLEMENTS" "$WIDGET" >/dev/null
   codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP" >/dev/null
+fi
+
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+  for signedBundle in "$APP" "$WIDGET"; do
+    signatureDetails=$(codesign -dvv "$signedBundle" 2>&1)
+    if [[ "$signatureDetails" == *"Authority="* || "$signatureDetails" != *"Signature=adhoc"* || "$signatureDetails" != *"TeamIdentifier=not set"* ]]; then
+      print -u2 "Privacy check failed: an Apple signing identity is embedded in $signedBundle"
+      exit 1
+    fi
+  done
 fi
 
 DMG_STAGING=$(mktemp -d "/private/tmp/codex-usage-widget-dmg.XXXXXX")
