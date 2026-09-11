@@ -10,7 +10,8 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 - Sends a macOS local notification when the five-hour rate-limit window resets; notification permission is requested on first launch
 - Secondary rate-limit percentage when the account provides one
 - Latest available daily token bucket and cumulative token count
-- Refreshes every 30 seconds, retrying every 1 second after a failed update; the panel shows the update time, a force-refresh button, and an exit button
+- Refreshes every 30 seconds, retrying every 1 second after a failed update; the panel shows the update time, force-refresh, hide, and exit buttons
+- The hide button dismisses the floating widget while keeping the local refresh process running; click the menu-bar usage widget to show it again
 - The history chart button opens a filtered trend chart with 24-hour, 7-day, 30-day, or all-history ranges and primary/secondary/both metric selections
 - Shows available manual reset credits beside the reset time; click the count to view each available credit's expiration when the app-server provides details
 - The appearance settings support a custom background image and image opacity; the existing dark theme color remains overlaid, and automatic compact scaling can be enabled with a configurable 1–10 second delay

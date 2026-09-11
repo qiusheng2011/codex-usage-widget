@@ -1315,7 +1315,18 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         usageClient.stop()
     }
 
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard !isOneShot else { return false }
+        revealPanel()
+        return true
+    }
+
     private func showPanel() {
+        if panel != nil {
+            revealPanel()
+            return
+        }
+
         let panel = UsagePanel(
             contentRect: NSRect(x: 0, y: 0, width: 320, height: 176),
             styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
@@ -1349,7 +1360,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = toolbarButton(
             title: "设置",
             action: #selector(showAppearanceSettings),
-            frame: NSRect(x: 174, y: 11, width: 36, height: 22),
+            frame: NSRect(x: 138, y: 11, width: 36, height: 22),
             color: buttonRed
         )
         settings.toolTip = "设置背景图片、透明度和极简自动缩放"
@@ -1358,7 +1369,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let chart = toolbarButton(
             title: "图表",
             action: #selector(showChart),
-            frame: NSRect(x: 210, y: 11, width: 34, height: 22),
+            frame: NSRect(x: 174, y: 11, width: 34, height: 22),
             color: buttonRed
         )
         chart.toolTip = "查看历史图表"
@@ -1367,12 +1378,21 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let refresh = toolbarButton(
             title: "刷新",
             action: #selector(forceRefresh),
-            frame: NSRect(x: 244, y: 11, width: 34, height: 22),
+            frame: NSRect(x: 208, y: 11, width: 34, height: 22),
             color: buttonRed
         )
         refresh.toolTip = "立即刷新用量"
         refresh.setAccessibilityLabel("立即刷新用量")
         content.addSubview(refresh)
+        let hide = toolbarButton(
+            title: "隐藏",
+            action: #selector(hidePanel),
+            frame: NSRect(x: 242, y: 11, width: 36, height: 22),
+            color: buttonRed
+        )
+        hide.toolTip = "隐藏用量浮窗，数据会继续更新"
+        hide.setAccessibilityLabel("隐藏用量浮窗")
+        content.addSubview(hide)
         let close = toolbarButton(
             title: "退出",
             action: #selector(quit),
@@ -1391,6 +1411,20 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         panel.orderFrontRegardless()
         self.panel = panel
         usageView = content
+    }
+
+    private func revealPanel() {
+        guard let panel else {
+            showPanel()
+            return
+        }
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        pointerInsidePanel = false
+        if panelEdge != nil {
+            setPanelCompact(false)
+        }
+        panel.orderFrontRegardless()
     }
 
     private func panelPointerEntered() {
@@ -1631,16 +1665,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func menuBarStatusItemClicked() {
-        guard let panel else {
-            showPanel()
-            return
-        }
-        compactCollapseTimer?.invalidate()
-        compactCollapseTimer = nil
-        if panelEdge != nil {
-            setPanelCompact(false)
-        }
-        panel.orderFrontRegardless()
+        revealPanel()
     }
 
     private func chooseBackgroundImage() {
@@ -1752,6 +1777,13 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         button.frame = frame
         return button
+    }
+
+    @objc private func hidePanel() {
+        compactCollapseTimer?.invalidate()
+        compactCollapseTimer = nil
+        pointerInsidePanel = false
+        panel?.orderOut(nil)
     }
 
     @objc private func quit() {
