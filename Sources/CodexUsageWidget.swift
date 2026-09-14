@@ -80,14 +80,49 @@ private struct ManualResetCredit: Codable {
 private enum AppearancePreference {
     static let backgroundImagePath = "appearance.backgroundImagePath"
     static let backgroundImageOpacity = "appearance.backgroundImageOpacity"
+    static let accentColor = "appearance.accentColor"
     static let autoCollapseEnabled = "appearance.autoCollapseEnabled"
     static let compactCollapseDelay = "appearance.compactCollapseDelay"
     static let menuBarStatusVisible = "appearance.menuBarStatusVisible"
     static let language = LanguagePreference.key
     static let defaultBackgroundImageOpacity = 0.28
+    static let defaultAccentColor = NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.26, alpha: 1)
     static let defaultAutoCollapseEnabled = true
     static let defaultCompactCollapseDelay = 2.0
     static let defaultMenuBarStatusVisible = true
+}
+
+private enum AccentColorPreference {
+    private static let redKey = "red"
+    private static let greenKey = "green"
+    private static let blueKey = "blue"
+    private static let alphaKey = "alpha"
+
+    static var current: NSColor {
+        guard let values = UserDefaults.standard.dictionary(forKey: AppearancePreference.accentColor),
+              let red = component(values[redKey]),
+              let green = component(values[greenKey]),
+              let blue = component(values[blueKey]) else {
+            return AppearancePreference.defaultAccentColor
+        }
+        let alpha = component(values[alphaKey]) ?? 1
+        return NSColor(calibratedRed: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    static func set(_ color: NSColor) {
+        guard let rgbColor = color.usingColorSpace(.deviceRGB) else { return }
+        UserDefaults.standard.set([
+            redKey: Double(rgbColor.redComponent),
+            greenKey: Double(rgbColor.greenComponent),
+            blueKey: Double(rgbColor.blueComponent),
+            alphaKey: Double(rgbColor.alphaComponent)
+        ], forKey: AppearancePreference.accentColor)
+    }
+
+    private static func component(_ value: Any?) -> CGFloat? {
+        guard let number = value as? NSNumber else { return nil }
+        return CGFloat(min(max(number.doubleValue, 0), 1))
+    }
 }
 
 /// Keeps existing appearance preferences when the development bundle identifier changes.
@@ -97,6 +132,7 @@ private enum LegacyPreferenceMigration {
     private static let keys = [
         AppearancePreference.backgroundImagePath,
         AppearancePreference.backgroundImageOpacity,
+        AppearancePreference.accentColor,
         AppearancePreference.autoCollapseEnabled,
         AppearancePreference.compactCollapseDelay,
         AppearancePreference.menuBarStatusVisible,
@@ -805,6 +841,11 @@ private final class UsageView: NSView {
         needsDisplay = true
     }
 
+    func updateAccentColor() {
+        manualResetButton.contentTintColor = accentColor
+        needsDisplay = true
+    }
+
     private func drawBackgroundImage(in card: NSBezierPath) {
         guard let backgroundImage,
               backgroundImageOpacity > 0,
@@ -852,7 +893,7 @@ private final class UsageView: NSView {
     }
 
     private var accentColor: NSColor {
-        NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.26, alpha: 1)
+        AccentColorPreference.current
     }
 
     private func drawText(_ text: String, at point: NSPoint, font: NSFont, color: NSColor) {
@@ -1117,6 +1158,10 @@ private final class UsageChartView: NSView {
         needsDisplay = true
     }
 
+    func updateAccentColor() {
+        needsDisplay = true
+    }
+
     private func drawSeries(_ values: [Int?], in plot: NSRect, color: NSColor) {
         guard !values.isEmpty else { return }
         var previous: NSPoint?
@@ -1155,7 +1200,7 @@ private final class UsageChartView: NSView {
     }
 
     private var accentColor: NSColor {
-        NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.26, alpha: 1)
+        AccentColorPreference.current
     }
 
     private var secondaryColor: NSColor {
@@ -1171,10 +1216,12 @@ private final class AppearanceSettingsView: NSView {
     var onCollapseDelayChanged: ((TimeInterval) -> Void)?
     var onMenuBarVisibilityChanged: ((Bool) -> Void)?
     var onLanguageChanged: ((AppLanguage) -> Void)?
+    var onAccentColorChanged: ((NSColor) -> Void)?
 
     private var language = LanguagePreference.current
     private let backgroundLabel = NSTextField(labelWithString: "")
     private let opacityLabel = NSTextField(labelWithString: "")
+    private let accentColorLabel = NSTextField(labelWithString: "")
     private let collapseDelayLabel = NSTextField(labelWithString: "")
     private let languageLabel = NSTextField(labelWithString: "")
     private let imagePathLabel = NSTextField(labelWithString: "")
@@ -1184,6 +1231,8 @@ private final class AppearanceSettingsView: NSView {
     private let clearButton = NSButton(title: "清除图片", target: nil, action: nil)
     private let autoCollapseButton = NSButton(checkboxWithTitle: "自动缩放为极简卡片", target: nil, action: nil)
     private let menuBarButton = NSButton(checkboxWithTitle: "菜单栏显示 CODEX", target: nil, action: nil)
+    private let accentColorWell = NSColorWell(frame: .zero)
+    private let resetAccentColorButton = NSButton(title: "恢复默认", target: nil, action: nil)
     private let collapseDelaySlider = NSSlider(value: 2, minValue: 1, maxValue: 10, target: nil, action: nil)
     private let collapseDelayValueLabel = NSTextField(labelWithString: "2 秒")
     private let hintLabel = NSTextField(labelWithString: "主题色保持为当前深色主题，图片只会作为半透明背景叠加。")
@@ -1199,6 +1248,7 @@ private final class AppearanceSettingsView: NSView {
     init(
         imagePath: String?,
         opacity: CGFloat,
+        accentColor: NSColor,
         autoCollapseEnabled: Bool,
         collapseDelay: TimeInterval,
         menuBarVisible: Bool,
@@ -1209,6 +1259,7 @@ private final class AppearanceSettingsView: NSView {
         configure(
             imagePath: imagePath,
             opacity: opacity,
+            accentColor: accentColor,
             autoCollapseEnabled: autoCollapseEnabled,
             collapseDelay: collapseDelay,
             menuBarVisible: menuBarVisible
@@ -1220,6 +1271,7 @@ private final class AppearanceSettingsView: NSView {
         configure(
             imagePath: nil,
             opacity: 0.28,
+            accentColor: AppearancePreference.defaultAccentColor,
             autoCollapseEnabled: true,
             collapseDelay: 2,
             menuBarVisible: true
@@ -1249,7 +1301,10 @@ private final class AppearanceSettingsView: NSView {
         collapseDelayValueLabel.frame = NSRect(x: width - 54, y: 178, width: 42, height: 20)
         languageLabel.frame = NSRect(x: 18, y: 212, width: 86, height: 20)
         languageControl.frame = NSRect(x: 112, y: 208, width: 150, height: 24)
-        hintLabel.frame = NSRect(x: 18, y: 252, width: max(1, width - 36), height: 20)
+        accentColorLabel.frame = NSRect(x: 18, y: 248, width: 86, height: 20)
+        accentColorWell.frame = NSRect(x: 112, y: 244, width: 52, height: 28)
+        resetAccentColorButton.frame = NSRect(x: 174, y: 245, width: 88, height: 26)
+        hintLabel.frame = NSRect(x: 18, y: 286, width: max(1, width - 36), height: 20)
     }
 
     func updateImagePath(_ path: String?) {
@@ -1280,19 +1335,35 @@ private final class AppearanceSettingsView: NSView {
         menuBarButton.state = visible ? .on : .off
     }
 
+    func updateAccentColor(_ color: NSColor) {
+        accentColorWell.color = color
+        chooseButton.contentTintColor = color
+        clearButton.contentTintColor = color
+        resetAccentColorButton.contentTintColor = color
+    }
+
     func updateLanguage(_ language: AppLanguage) {
         self.language = language
         backgroundLabel.stringValue = L10n.text("背景图片", "Background image")
         chooseButton.title = L10n.text("选择图片", "Choose image")
         clearButton.title = L10n.text("清除图片", "Clear image")
         opacityLabel.stringValue = L10n.text("图片透明度", "Image opacity")
+        accentColorLabel.stringValue = L10n.text("红色文字颜色", "Accent text color")
+        resetAccentColorButton.title = L10n.text("恢复默认", "Reset")
+        accentColorWell.toolTip = L10n.text(
+            "调整原红色文字、图表主周期和菜单栏用量颜色",
+            "Change the former red text, primary chart series, and menu-bar usage color"
+        )
+        accentColorWell.setAccessibilityLabel(L10n.text("红色文字颜色", "Accent text color"))
+        resetAccentColorButton.toolTip = L10n.text("恢复默认红色", "Restore the default red")
+        resetAccentColorButton.setAccessibilityLabel(L10n.text("恢复默认红色", "Restore default red"))
         autoCollapseButton.title = L10n.text("自动缩放为极简卡片", "Auto-collapse to compact card")
         menuBarButton.title = L10n.text("菜单栏显示 CODEX", "Show CODEX in menu bar")
         collapseDelayLabel.stringValue = L10n.text("缩放等待", "Collapse delay")
         languageLabel.stringValue = L10n.text("语言", "Language")
         hintLabel.stringValue = L10n.text(
-            "主题色保持为当前深色主题，图片只会作为半透明背景叠加。",
-            "The dark theme remains; the image is added as a translucent background."
+            "强调色可自定义；图片只会作为半透明背景叠加。",
+            "The accent color is customizable; the image is added as a translucent background."
         )
         languageControl.selectedSegment = language.isChinese ? 0 : 1
         languageControl.setAccessibilityLabel(L10n.text("界面语言", "Interface language"))
@@ -1330,9 +1401,18 @@ private final class AppearanceSettingsView: NSView {
         onLanguageChanged?(language)
     }
 
+    @objc private func accentColorChanged() {
+        onAccentColorChanged?(accentColorWell.color)
+    }
+
+    @objc private func resetAccentColor() {
+        onAccentColorChanged?(AppearancePreference.defaultAccentColor)
+    }
+
     private func configure(
         imagePath: String?,
         opacity: CGFloat,
+        accentColor: NSColor,
         autoCollapseEnabled: Bool,
         collapseDelay: TimeInterval,
         menuBarVisible: Bool
@@ -1340,6 +1420,7 @@ private final class AppearanceSettingsView: NSView {
         wantsLayer = true
         configureLabel(backgroundLabel, size: 12, weight: .semibold, color: .white)
         configureLabel(opacityLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
+        configureLabel(accentColorLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
         configureLabel(collapseDelayLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
         configureLabel(languageLabel, size: 11, weight: .medium, color: NSColor(white: 0.78, alpha: 1))
         addSubview(backgroundLabel)
@@ -1380,6 +1461,16 @@ private final class AppearanceSettingsView: NSView {
         menuBarButton.action = #selector(menuBarVisibilityChanged)
         addSubview(menuBarButton)
 
+        addSubview(accentColorLabel)
+        accentColorWell.target = self
+        accentColorWell.action = #selector(accentColorChanged)
+        accentColorWell.isBordered = true
+        addSubview(accentColorWell)
+        configureButton(resetAccentColorButton)
+        resetAccentColorButton.target = self
+        resetAccentColorButton.action = #selector(resetAccentColor)
+        addSubview(resetAccentColorButton)
+
         addSubview(collapseDelayLabel)
         collapseDelaySlider.controlSize = .small
         collapseDelaySlider.numberOfTickMarks = 10
@@ -1406,6 +1497,7 @@ private final class AppearanceSettingsView: NSView {
         addSubview(hintLabel)
         updateImagePath(imagePath)
         updateOpacity(opacity)
+        updateAccentColor(accentColor)
         updateAutoCollapse(autoCollapseEnabled)
         updateCollapseDelay(collapseDelay)
         updateMenuBarVisible(menuBarVisible)
@@ -1433,7 +1525,7 @@ private final class AppearanceSettingsView: NSView {
     }
 
     private var accentColor: NSColor {
-        NSColor(calibratedRed: 0.97, green: 0.32, blue: 0.26, alpha: 1)
+        AccentColorPreference.current
     }
 }
 
@@ -1534,12 +1626,12 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         content.onMouseExitedPanel = { [weak self] in
             self?.panelPointerExited()
         }
-        let buttonRed = NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
+        let accentColor = savedAccentColor
         let settings = toolbarButton(
             title: L10n.text("设置", "Settings"),
             action: #selector(showAppearanceSettings),
             frame: NSRect(x: 138, y: 11, width: 36, height: 22),
-            color: buttonRed
+            color: accentColor
         )
         settings.toolTip = L10n.text("设置背景图片、透明度和极简自动缩放", "Set the background image, opacity, and compact mode")
         settings.setAccessibilityLabel(L10n.text("外观设置", "Appearance settings"))
@@ -1548,7 +1640,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             title: L10n.text("图表", "Chart"),
             action: #selector(showChart),
             frame: NSRect(x: 174, y: 11, width: 34, height: 22),
-            color: buttonRed
+            color: accentColor
         )
         chart.toolTip = L10n.text("查看历史图表", "View usage history chart")
         chart.setAccessibilityLabel(L10n.text("查看历史图表", "View usage history chart"))
@@ -1557,7 +1649,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             title: L10n.text("刷新", "Refresh"),
             action: #selector(forceRefresh),
             frame: NSRect(x: 208, y: 11, width: 34, height: 22),
-            color: buttonRed
+            color: accentColor
         )
         refresh.toolTip = L10n.text("立即刷新用量", "Refresh usage now")
         refresh.setAccessibilityLabel(L10n.text("立即刷新用量", "Refresh usage now"))
@@ -1566,7 +1658,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             title: L10n.text("隐藏", "Hide"),
             action: #selector(hidePanel),
             frame: NSRect(x: 242, y: 11, width: 36, height: 22),
-            color: buttonRed
+            color: accentColor
         )
         hide.toolTip = L10n.text("隐藏用量浮窗，数据会继续更新", "Hide the widget; usage will keep updating")
         hide.setAccessibilityLabel(L10n.text("隐藏用量浮窗", "Hide usage widget"))
@@ -1575,7 +1667,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
             title: L10n.text("退出", "Quit"),
             action: #selector(quit),
             frame: NSRect(x: 278, y: 11, width: 35, height: 22),
-            color: buttonRed
+            color: accentColor
         )
         close.toolTip = L10n.text("关闭用量浮窗", "Quit Codex Usage Widget")
         close.setAccessibilityLabel(L10n.text("退出", "Quit"))
@@ -1657,7 +1749,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
                 string: titles[index],
                 attributes: [
                     .font: toolbarFont,
-                    .foregroundColor: NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
+                    .foregroundColor: savedAccentColor
                 ]
             )
         }
@@ -1784,6 +1876,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         if let appearanceSettingsPanel {
             appearanceSettingsView?.updateImagePath(savedBackgroundImagePath)
             appearanceSettingsView?.updateOpacity(savedBackgroundImageOpacity)
+            appearanceSettingsView?.updateAccentColor(savedAccentColor)
             appearanceSettingsView?.updateAutoCollapse(autoCollapseEnabled)
             appearanceSettingsView?.updateCollapseDelay(compactCollapseDelay)
             appearanceSettingsView?.updateMenuBarVisible(menuBarStatusVisible)
@@ -1793,7 +1886,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 294),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 324),
             styleMask: [.titled, .closable, .utilityWindow],
             backing: .buffered,
             defer: false
@@ -1809,6 +1902,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         let settings = AppearanceSettingsView(
             imagePath: savedBackgroundImagePath,
             opacity: savedBackgroundImageOpacity,
+            accentColor: savedAccentColor,
             autoCollapseEnabled: autoCollapseEnabled,
             collapseDelay: compactCollapseDelay,
             menuBarVisible: menuBarStatusVisible,
@@ -1832,6 +1926,9 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         settings.onMenuBarVisibilityChanged = { [weak self] visible in
             self?.setMenuBarStatusVisible(visible)
+        }
+        settings.onAccentColorChanged = { [weak self] color in
+            self?.setAccentColor(color)
         }
         settings.onLanguageChanged = { [weak self] language in
             self?.setLanguage(language)
@@ -1877,7 +1974,7 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private var menuBarAccentColor: NSColor {
-        NSColor(calibratedRed: 0.95, green: 0.25, blue: 0.22, alpha: 1)
+        savedAccentColor
     }
 
     private func menuBarImage(primary: String, secondary: String) -> NSImage {
@@ -1964,6 +2061,15 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
         appearanceSettingsView?.updateMenuBarVisible(visible)
     }
 
+    private func setAccentColor(_ color: NSColor) {
+        AccentColorPreference.set(color)
+        usageView?.updateAccentColor()
+        appearanceSettingsView?.updateAccentColor(savedAccentColor)
+        chartView?.updateAccentColor()
+        updatePanelLanguage()
+        updateMenuBarStatus(latestSnapshot)
+    }
+
     private func setLanguage(_ language: AppLanguage) {
         guard LanguagePreference.current != language else { return }
         LanguagePreference.set(language)
@@ -2000,6 +2106,10 @@ private final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private var savedBackgroundImagePath: String? {
         UserDefaults.standard.string(forKey: AppearancePreference.backgroundImagePath)
+    }
+
+    private var savedAccentColor: NSColor {
+        AccentColorPreference.current
     }
 
     private var savedBackgroundImage: NSImage? {

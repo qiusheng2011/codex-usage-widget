@@ -16,6 +16,7 @@ A lightweight macOS floating widget that sits beside Codex and shows Codex usage
 - The history chart button opens a filtered trend chart with 24-hour, 7-day, 30-day, or all-history ranges and primary/secondary/both metric selections
 - Shows available manual reset credits beside the reset time; click the count to view each available credit's expiration when the app-server provides details
 - The appearance settings support a custom background image and image opacity; the existing dark theme color remains overlaid, and automatic compact scaling can be enabled with a configurable 1–10 second delay
+- The appearance settings support choosing a custom accent text color for the former red UI text, primary chart series, and menu-bar usage display, with a reset-to-default option
 - The appearance settings support switching between Chinese and English; Chinese is the default and the choice is remembered locally
 - The desktop Widget follows the selected language and refreshes when the language changes; old local history continues to default to Chinese
 - The menu bar can show live usage as `CODEX(5h:42%|1W:18%)`; its visibility is configurable and enabled by default
