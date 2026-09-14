@@ -23,7 +23,7 @@ mkdir -p "$APP/Contents/Resources"
 mkdir -p "$WIDGET/Contents/MacOS"
 cp "$ROOT/AppBundle/Contents/Info.plist" "$APP/Contents/Info.plist"
 cp "$WIDGET_PLIST" "$WIDGET/Contents/Info.plist"
-xcrun swiftc "$ROOT/Sources/CodexUsageWidget.swift" \
+xcrun swiftc "$ROOT/Sources/Models.swift" "$ROOT/Sources/UsageClient.swift" "$ROOT/Sources/UsageView.swift" "$ROOT/Sources/AppearanceSettingsView.swift" "$ROOT/Sources/UsageChartView.swift" "$ROOT/Sources/AppDelegate.swift" \
   -target arm64-apple-macosx13.0 \
   -parse-as-library \
   -framework AppKit \
