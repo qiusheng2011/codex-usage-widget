@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SystemConfiguration
 import UserNotifications
 import WidgetKit
 
@@ -112,6 +113,52 @@ final class PrimaryResetNotificationScheduler {
     }
 }
 
+/// Supplies manual macOS proxies to app-server, which fetches usage from Codex services.
+enum SystemProxyEnvironment {
+    static func settings() -> [String: Any] {
+        SCDynamicStoreCopyProxies(nil) as? [String: Any] ?? [:]
+    }
+
+    static func resolve(inherited: [String: String], settings: [String: Any]) -> [String: String] {
+        var environment = inherited
+        var usesSystemProxy = false
+        for (prefix, variable) in [("HTTP", "http_proxy"), ("HTTPS", "https_proxy")] {
+            // An explicitly supplied value (including an empty one) takes precedence.
+            guard inherited[variable] == nil, inherited[variable.uppercased()] == nil,
+                  inherited["all_proxy"] == nil, inherited["ALL_PROXY"] == nil,
+                  (settings[prefix + "Enable"] as? NSNumber)?.boolValue == true,
+                  let host = settings[prefix + "Proxy"] as? String, !host.isEmpty,
+                  let port = settings[prefix + "Port"] as? NSNumber,
+                  (1...65535).contains(port.intValue) else { continue }
+            var url = URLComponents()
+            // Both settings describe HTTP proxy servers; HTTPS uses CONNECT through them.
+            url.scheme = "http"
+            url.host = host
+            url.port = port.intValue
+            guard let value = url.url?.absoluteString else { continue }
+            environment[variable] = value
+            environment[variable.uppercased()] = value
+            usesSystemProxy = true
+        }
+        if usesSystemProxy, inherited["no_proxy"] == nil, inherited["NO_PROXY"] == nil,
+           let exceptions = settings["ExceptionsList"] as? [String] {
+            // no_proxy has no equivalent for macOS's unqualified-host marker.
+            let value = exceptions.filter { $0 != "<local>" }
+                .map { $0.hasPrefix("*.") ? String($0.dropFirst()) : $0 }
+                .joined(separator: ",")
+            if !value.isEmpty {
+                environment["no_proxy"] = value
+                environment["NO_PROXY"] = value
+            }
+        }
+        return environment
+    }
+
+    static func proxyValues(in environment: [String: String]) -> [String: String] {
+        environment.filter { ["http_proxy", "https_proxy", "all_proxy", "no_proxy"].contains($0.key.lowercased()) }
+    }
+}
+
 /// A read-only JSON-RPC client for the locally installed Codex app server.
 /// It never reads, writes, or exposes authentication tokens.
 final class UsageClient {
@@ -120,6 +167,8 @@ final class UsageClient {
     var onUpdate: UpdateHandler?
 
     private let codexPath: String
+    private let proxySettings: () -> [String: Any]
+    private var launchedProxyEnvironment: [String: String]?
     private let historyStore = UsageHistoryStore()
     private var process: Process?
     private var input: FileHandle?
@@ -142,8 +191,9 @@ final class UsageClient {
     private let retryInterval: TimeInterval = 1
     private let requestTimeout: TimeInterval = 5
 
-    init() {
-        codexPath = ProcessInfo.processInfo.environment["CODEX_BIN"]
+    init(codexPath: String? = nil, proxySettings: @escaping () -> [String: Any] = SystemProxyEnvironment.settings) {
+        self.proxySettings = proxySettings
+        self.codexPath = codexPath ?? ProcessInfo.processInfo.environment["CODEX_BIN"]
             ?? "/Applications/ChatGPT.app/Contents/Resources/codex"
     }
 
@@ -158,6 +208,7 @@ final class UsageClient {
         guard isStarted else { return }
         refreshTimer?.invalidate()
         refreshTimer = nil
+        guard !restartForProxyChange() else { return }
         guard !refreshInFlight else { return }
         if isInitialized {
             refresh()
@@ -181,6 +232,7 @@ final class UsageClient {
         process?.terminate()
         process = nil
         input = nil
+        launchedProxyEnvironment = nil
     }
 
     private func launch() {
@@ -192,19 +244,25 @@ final class UsageClient {
 
         task.executableURL = URL(fileURLWithPath: codexPath)
         task.arguments = ["app-server", "--listen", "stdio://"]
+        let environment = SystemProxyEnvironment.resolve(
+            inherited: ProcessInfo.processInfo.environment,
+            settings: proxySettings()
+        )
+        task.environment = environment
         task.standardInput = stdin
         task.standardOutput = stdout
         task.standardError = stderr
-        stdout.fileHandleForReading.readabilityHandler = { [weak self] handle in
+        stdout.fileHandleForReading.readabilityHandler = { [weak self, weak task] handle in
             let data = handle.availableData
             guard !data.isEmpty else { return }
             DispatchQueue.main.async {
-                self?.consume(data)
+                guard let self, let task, self.process === task else { return }
+                self.consume(data)
             }
         }
-        task.terminationHandler = { [weak self] _ in
+        task.terminationHandler = { [weak self] task in
             DispatchQueue.main.async {
-                guard let self, self.isStarted, !self.isStopping, self.process != nil else { return }
+                guard let self, self.isStarted, !self.isStopping, self.process === task else { return }
                 self.process = nil
                 self.input = nil
                 self.retryAfterFailure()
@@ -214,6 +272,7 @@ final class UsageClient {
         do {
             try task.run()
             process = task
+            launchedProxyEnvironment = SystemProxyEnvironment.proxyValues(in: environment)
             input = stdin.fileHandleForWriting
             initializeRequestID = send(
                 method: "initialize",
@@ -232,6 +291,7 @@ final class UsageClient {
     private func refresh() {
         refreshTimer = nil
         guard isStarted else { return }
+        guard !restartForProxyChange() else { return }
         guard isInitialized, process != nil else {
             launch()
             return
@@ -254,6 +314,17 @@ final class UsageClient {
         refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             self?.refresh()
         }
+    }
+
+    private func restartForProxyChange() -> Bool {
+        guard process != nil, let launchedProxyEnvironment else { return false }
+        let environment = SystemProxyEnvironment.resolve(
+            inherited: ProcessInfo.processInfo.environment,
+            settings: proxySettings()
+        )
+        guard SystemProxyEnvironment.proxyValues(in: environment) != launchedProxyEnvironment else { return false }
+        retryAfterFailure()
+        return true
     }
 
     private func retryAfterFailure() {
@@ -283,6 +354,7 @@ final class UsageClient {
             input = nil
         }
         outputBuffer.removeAll()
+        launchedProxyEnvironment = nil
         scheduleRefresh(after: retryInterval)
     }
 

@@ -82,6 +82,26 @@ For a headless, sanitized connectivity check:
 `--once` runs without starting the AppKit host or WidgetKit, so it doesn't register the
 temporary build as a duplicate desktop-widget provider.
 
+### System proxy and connection troubleshooting
+
+The floating app talks to a local Codex app-server, which fetches current usage from
+Codex services over the network. Only history charts and the desktop widget read saved
+local snapshots. When launched from Finder, app-server follows enabled macOS manual
+HTTP/HTTPS proxies. Enable your proxy software's system-proxy mode if your connection
+requires a proxy; merely running the proxy software is not sufficient.
+
+Explicit `http_proxy`/`HTTP_PROXY`, `https_proxy`/`HTTPS_PROXY`, `all_proxy`/`ALL_PROXY`
+and `no_proxy`/`NO_PROXY` environment settings are preserved. System bypass entries
+for hosts, domains and networks are passed through; `<local>` is not supported. PAC
+and system SOCKS proxies are not supported. Proxy addresses are not saved by the widget.
+
+Proxy changes are checked on each launch and refresh. Click Refresh after a change to
+reconnect immediately (failed connections retry after one second); successful updates
+remain 30 seconds apart. If the app stays on “Connecting to Codex…”, check that Codex
+is signed in and the system HTTP/HTTPS proxy is enabled, then run the `--once` check.
+A successful terminal check alone does not prove Finder connectivity, because the
+terminal may supply proxy environment variables that Finder does not inherit.
+
 ## Privacy-preserving package signing on macOS 26
 
 The build links the widget through `_NSExtensionMain`, matching Xcode's extension

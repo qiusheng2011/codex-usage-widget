@@ -113,6 +113,23 @@ CODEX_BIN="/path/to/codex" "AppBundle/Codex Usage Widget.app/Contents/MacOS/Code
 该模式不会启动浮窗和菜单栏状态项。
 它也不会初始化 AppKit 或 WidgetKit，因此不会把工作区构建产物登记为重复的桌面 Widget 提供方。
 
+## 系统代理和连接排查
+
+浮窗与本机 Codex app-server 通信，后者仍需联网向 Codex 服务获取当前用量。
+只有历史图表和桌面 Widget 读取已保存的本地快照。从 Finder 启动时，app-server
+会跟随 macOS 已启用的手动 HTTP/HTTPS 系统代理。网络需要代理时，请打开代理软件的
+“系统代理”功能；仅启动代理软件并不代表系统代理已启用。
+
+启动环境中明确设置的 `http_proxy`/`HTTP_PROXY`、`https_proxy`/`HTTPS_PROXY`、
+`all_proxy`/`ALL_PROXY` 和 `no_proxy`/`NO_PROXY` 会保留。系统代理绕过列表中的主机、
+域名和网段会传递给 app-server，`<local>` 不支持。本次不支持 PAC 和系统 SOCKS 代理，
+浮窗不会保存代理地址。
+
+每次启动和刷新都会检查代理变化。修改后点击“刷新”即可重连；失败后 1 秒重试，
+成功后仍每 30 秒刷新。如果持续显示“正在连接 Codex…”，请检查 Codex 已登录且系统
+HTTP/HTTPS 代理已启用，再运行 `--once` 检查。终端检查成功不代表 Finder 启动一定成功，
+因为终端可能带有 Finder 不继承的代理环境变量。
+
 ## macOS 26 的隐私保护签名
 
 构建脚本使用与 Xcode 扩展一致的 `_NSExtensionMain` 启动入口。缺少此入口时，扩展虽能
