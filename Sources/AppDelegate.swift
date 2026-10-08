@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 import UniformTypeIdentifiers
 import WidgetKit
@@ -848,6 +849,45 @@ final class OneShotUsageRunner {
     }
 }
 
+/// One GUI instance per macOS user, shared by installed and development copies.
+/// Keep the lock file in place: unlinking it could let processes lock different inodes.
+final class SingleInstanceCoordinator {
+    private let activationName = Notification.Name("local.codex.usagewidget.reveal")
+    private let userScope = String(getuid())
+    private var lockDescriptor: Int32 = -1
+    private var observer: NSObjectProtocol?
+
+    func acquire() throws -> Bool {
+        // Subscribe before taking the lock so a concurrent launch cannot lose its request.
+        observer = DistributedNotificationCenter.default().addObserver(
+            forName: activationName, object: userScope, queue: .main
+        ) { _ in
+            guard let delegate = NSApp.delegate as? AppDelegate else { return }
+            _ = delegate.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
+        }
+        let directory = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/Codex Usage Widget", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        lockDescriptor = open(directory.appendingPathComponent("instance.lock").path,
+                              O_CREAT | O_RDWR | O_CLOEXEC | O_NOFOLLOW, S_IRUSR | S_IWUSR)
+        guard lockDescriptor >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        if flock(lockDescriptor, LOCK_EX | LOCK_NB) == 0 { return true }
+        let lockError = errno
+        guard lockError == EWOULDBLOCK else {
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(lockError))
+        }
+        DistributedNotificationCenter.default().postNotificationName(
+            activationName, object: userScope, userInfo: nil, deliverImmediately: true
+        )
+        return false
+    }
+
+    deinit {
+        if let observer { DistributedNotificationCenter.default().removeObserver(observer) }
+        if lockDescriptor >= 0 { close(lockDescriptor) }
+    }
+}
+
 @main
 enum CodexUsageWidgetMain {
     static func main() {
@@ -855,10 +895,17 @@ enum CodexUsageWidgetMain {
             let oneShotRunner = OneShotUsageRunner()
             oneShotRunner.run()
         } else {
+            let instance = SingleInstanceCoordinator()
+            do {
+                guard try instance.acquire() else { return }
+            } catch {
+                FileHandle.standardError.write(Data("Unable to acquire the application instance lock.\n".utf8))
+                return
+            }
             let app = NSApplication.shared
             let delegate = AppDelegate()
             app.delegate = delegate
-            app.run()
+            withExtendedLifetime(instance) { app.run() }
         }
     }
 }

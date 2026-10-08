@@ -45,6 +45,8 @@ the original author and purchase a commercial license.
 
 ## Launch
 
+Only one floating-widget instance runs per macOS user, including across installed and development copies. Opening it again reveals the existing window. The `--once` connectivity check runs independently.
+
 Open `AppBundle/Codex Usage Widget.app`, or run:
 
 ```zsh

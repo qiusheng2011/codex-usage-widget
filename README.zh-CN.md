@@ -43,6 +43,8 @@ English：[README.md](README.md)
 
 ## 安装和启动
 
+同一 macOS 用户下只运行一个浮窗实例，安装版和开发目录中的副本共用此限制。再次启动会显示已有浮窗。`--once` 连通性检查仍可独立运行。
+
 项目提供两种产物：
 
 - `AppBundle/Codex Usage Widget.app`：应用本体。
